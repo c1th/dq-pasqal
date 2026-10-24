@@ -40,22 +40,48 @@ class ShotV2:
 
 
 def resolve_v2(inst: Instance, chosen: list[int], cands, tours: TourTable, exact_max: int = 8) -> ShotV2:
-    """Overlap resolution (only needed for non-independent shots) + exact completion."""
+    """Overlap resolution (only needed for non-independent shots) + exact completion.
+
+    Independent shots with more than K candidates: every K-subset of the chosen candidates
+    is completed exactly and the cheapest feasible one is kept (at most C(12, 4) = 495
+    subsets).  Overlapping shots: a disjoint sub-collection is kept greedily by routed cost
+    per customer, then completed.  The candidates kept are always a subset of what the
+    device chose; the completion never alters them."""
+    from itertools import combinations
     sets = [set(cands[a].members) for a in chosen]
     n_over = sum(1 for i in range(len(chosen)) for j in range(i + 1, len(chosen)) if sets[i] & sets[j])
-    # keep a disjoint sub-collection, best routed cost per customer first
-    order = sorted(range(len(chosen)), key=lambda t: tours.cost_of(sorted(sets[t])) / max(len(sets[t]), 1))
-    kept, used = [], set()
-    for t in order:
-        if sets[t] & used:
-            continue
-        if len(kept) >= inst.K:
-            break
-        kept.append(sorted(sets[t]))
-        used |= sets[t]
-    comp = complete_exact(inst, kept, tours, exact_max=exact_max)
-    return ShotV2("", 0, len(chosen), n_over, len(kept), len(used) / inst.N,
-                  n_over == 0 and len(chosen) <= inst.K, comp.clusters is not None,
+    raw_ok = n_over == 0 and len(chosen) <= inst.K
+    dropped = False
+    if n_over == 0:
+        k_full = min(len(chosen), inst.K)
+        best = None
+        for k_keep in range(k_full, -1, -1):
+            for sub in combinations(range(len(chosen)), k_keep):
+                kept = [sorted(sets[t]) for t in sub]
+                comp = complete_exact(inst, kept, tours, exact_max=exact_max)
+                if comp.clusters is not None and (best is None or comp.cost < best[0].cost):
+                    best = (comp, kept)
+            if best is not None:
+                dropped = k_keep < k_full   # had to drop device-chosen candidates to become feasible
+                break
+        if best is None:
+            kept = [sorted(sets[t]) for t in range(k_full)]
+            comp = complete_exact(inst, kept, tours, exact_max=exact_max)
+        else:
+            comp, kept = best
+    else:
+        order = sorted(range(len(chosen)), key=lambda t: tours.cost_of(sorted(sets[t])) / max(len(sets[t]), 1))
+        kept, used = [], set()
+        for t in order:
+            if sets[t] & used:
+                continue
+            if len(kept) >= inst.K:
+                break
+            kept.append(sorted(sets[t]))
+            used |= sets[t]
+        comp = complete_exact(inst, kept, tours, exact_max=exact_max)
+    covered = sum(len(cl) for cl in kept) / inst.N
+    return ShotV2("", 0, len(chosen), n_over, len(kept), covered, raw_ok and not dropped, comp.clusters is not None,
                   comp.cost, comp.exact, comp.clusters)
 
 

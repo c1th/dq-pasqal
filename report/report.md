@@ -33,8 +33,8 @@ optimum) are 0–16 % on S, 3–13 % on M, 1–12 % on L.
 
 Once the amplitude is back at zero, Eq. (1) of the brief is the classical cost
 $E(n) = -\delta \sum_a n_a + \sum_{a<b} \frac{C_6}{r_{ab}^6}\, n_a n_b$.
-Through the laser I control one global $\delta$: every variable has the *same* linear coefficient.
-Through the positions I control the couplings, but they are all positive and fall as $1/r^6$; nothing is ever
+Through the laser we control one global $\delta$: every variable has the *same* linear coefficient.
+Through the positions we control the couplings, but they are all positive and fall as $1/r^6$; nothing is ever
 exactly uncoupled, and with 5 µm minimum separation and 38 µm radius the useful band is roughly
 5–10 µm (doubling the distance divides the coupling by 64). At $\Omega_{\max}=12.57$ rad/µs the blockade
 radius is $(C_6/\Omega)^{1/6}=6.4$ µm. This cost is maximum independent set (MIS) on a unit-disk graph.
@@ -46,7 +46,7 @@ $L_k=\sum_i d_i x_{ik}$, leaves only $2\sum_k\sum_{i<j} d_i d_j x_{ik}x_{jk}$: h
 within a vehicle, no slack, no linear term — but a *dense* coupling pattern. (ii) *Dense couplings cannot
 be realised*: an atom can have about three strongly coupled neighbours whose mutual couplings are weak,
 and mutually conflicting atoms must fit inside one blockade disc. Any model needing more is an
-approximation whose error must be measured; I measured it by brute-forcing the ground state of the
+approximation whose error must be measured; we measured it by brute-forcing the ground state of the
 *realised* register cost (`embedding.classical_ground_states`, `manifold_check`) before any emulation.
 
 ### Variable accounting (Derive 4.1)
@@ -60,7 +60,7 @@ approximation whose error must be measured; I measured it by brute-forcing the g
 
 ## 3. The model: capacity by construction, packing by blockade
 
-Instead of penalising the inequality, I changed what the register is asked for. For every customer
+Instead of penalising the inequality, we changed what the register is asked for. For every customer
 centre, take the nearest customers in order of distance until the load would exceed $f\,Q$
 ($f=0.85$); that set is a **candidate cluster, capacity-feasible by construction**. Near-duplicate
 candidates (Jaccard overlap > 0.6) are thinned, because candidates that pairwise overlap must sit
@@ -69,16 +69,20 @@ are placed inside the blockade radius iff their candidates share a customer. Wit
 final detuning the ground state is a **maximum set of pairwise-disjoint compact clusters**. Two
 candidates overlap only when their centres are close on the map, so the conflict graph is close to a
 unit-disk graph of the map itself: the register is the map at scale, which is what a neutral-atom array
-embeds best. The classical parts are light: sorting by distance to build candidates, and a greedy
-completion that assigns each uncovered customer to the chosen cluster with the cheapest marginal
-distance that has slack (opening a new cluster while fewer than $K$ exist). The covered fraction is
-reported for every shot. There is no penalty weight to tune; the knobs are $f$ and the Jaccard threshold.
+embeds best. There is no penalty weight to tune; the knobs are $f$ and the Jaccard threshold.
 
-**Selection rule (stated).** The answer is the device's best *raw-feasible* shot: an independent set of
-at most $K$ candidates with the most candidates kept, then the lowest objective after greedy completion.
-Overlap resolution (drop overlapping candidates, most compact first) is only a fallback and is flagged
-as `repaired`. The best objective over all shots after full post-processing is reported separately
-(`cvrp_gap_pct_any`) because that is what a purely classical completion would claim.
+**Classical completion (stated, identical for quantum, oracle and random shots).** The device's
+chosen candidates are kept intact; uncovered customers are then placed by one of two completions, both
+reported: *greedy* (each leftover to the chosen cluster with the cheapest marginal pairwise distance
+that has slack) and *exact* (every assignment of the leftovers to the $K$ vehicles is enumerated with
+the exact tour cost of each resulting cluster from the Held–Karp table, optimal given the chosen
+candidates whenever $\le 8$ customers are uncovered). The covered fraction is reported for every shot.
+
+**Selection rule (stated).** The answer is the device's best *raw-feasible* shot — an independent set
+of at most $K$ candidates — by exact routed cost after completion (if the device lit more than $K$
+candidates, every $K$-subset is completed and the cheapest kept). Shots with overlapping candidates are
+only a fallback, resolved greedily and flagged `repaired`. We also report the best over *all* shots
+after completion (`cvrp_gap_pct_any`), because that is what a purely classical completion would claim.
 
 ## 4. Embedding and pulse
 
@@ -98,7 +102,7 @@ non-conflict pair costs less. $\Omega_{\max}=4$ rad/µs gives a blockade radius 
 two design distances. The detuning starts at $-1.5\,\delta_f$ so the initial state is the empty register.
 
 **Pulse (A4).** Baseline: three-point interpolated amplitude $0\to\Omega_{\max}\to0$, linear detuning,
-4000 ns (device maximum 6000 ns). I scored pulses by the metrics that reward good shots — feasibility
+4000 ns (device maximum 6000 ns). we scored pulses by the metrics that reward good shots — feasibility
 rate, $P(\text{shot is a maximum packing})$ and the best gap — not by mean energy. The sweep over
 duration {1, 2, 4, 6} µs, $\Omega_{\max}\in\{2,4,8\}$ rad/µs and a `slow-end` detuning that spends
 70 % of the sweep on the positive side (240 emulations, `results/pulse_sweep.csv`, Fig. 2) gives a clean
@@ -114,41 +118,44 @@ $\Omega_{\max}=2$, `slow-end`.
 ## 5. Results
 
 Emulation: pulser 1.9.1, `AnalogDevice` (automatic trap layout), exact QuTiP state-vector backend
-(≤ 10 atoms, so no bond dimension is involved), 500 shots per run, 3 runs per instance, baseline pulse
-(4 µs, $\Omega_{\max}=4$, linear). Every row of `results/results.csv` carries the Section 9 metrics.
-Means are over the 5 instances of a tier; "any-shot" is the best gap after full post-processing of every
-shot, i.e. what a classical completion would claim.
+(≤ 12 atoms, so no bond dimension is involved), 500 shots per run, 3 runs per instance, 20 instances per
+tier. Every (instance, sampler, run) is sampled **once** and the same shots are post-processed with both
+completions, so the two halves of the table differ only in the classical step. Means over instances;
+"any-shot" is the best over all shots after completion. [QuTiP rows: FILL from `results/final.csv` after
+`run_final.py --samplers qutip`; classical-sampler rows below are final.]
 
-| tier | atoms | sampler | raw feas. | $P$(max packing/shot) | CVRP gap mean / best | $P(\text{gap}\le1\%)$ | any-shot |
-|--|--|-----------------------|----|-----|------|----|----|
-| S | 2–4 | QuTiP sweep | 0.80 | 0.75 | 7.5 % / 0.0 % | 0.60 | 1.3 % |
-| M | 5–6 | QuTiP sweep | 0.76 | 0.68 | 6.5 % / 0.0 % | 0.60 | 3.6 % |
-| L | 6–10 | QuTiP sweep | 0.66 | 0.47 | 14.7 % / 5.6 % | 0.00 | 14.7 % |
-| M | 5–6 | ideal MIS (target graph, no physics) | 1.00 | 1.00 | 6.5 % / 0.0 % | 0.60 | 6.5 % |
-| M | 5–6 | oracle: exact ground state of realised register | 0.80 | 0.80 | 12.8 % / 0.7 % | 0.20 | 12.8 % |
-| L | 6–10 | oracle: exact ground state of realised register | 0.80 | 0.80 | 16.9 % / 5.6 % | 0.00 | 16.9 % |
-| M | 5–6 | random bitstrings, same post-processing | 0.20 | 0.07 | 6.5 % / 0.0 % | 0.60 | 3.6 % |
-| L | 6–10 | random bitstrings, same post-processing | 0.10 | 0.01 | 13.8 % / 2.8 % | 0.00 | 14.7 % |
+| tier | atoms | sampler | raw feas. | $P$(max packing/shot) | gap, greedy completion | gap, exact completion |
+|--|--|------------------------|----|-----|------|------|
+| S | 2–4 | QuTiP sweep | [F] | [F] | [F] | [F] |
+| S | 2–4 | ideal MIS of the target graph | 0.73 | 0.73 | 6.8 % | 3.9 % |
+| S | 2–4 | random bitstrings | 0.69 | 0.26 | 5.4 % | 1.5 % |
+| M | 4–8 | QuTiP sweep | [F] | [F] | [F] | [F] |
+| M | 4–8 | ideal MIS | 0.92 | 0.92 | 5.1 % | 2.2 % |
+| M | 4–8 | oracle (exact ground state of realised register) | 0.60 | 0.60 | 9.9 % | 4.1 % |
+| M | 4–8 | random bitstrings | 0.22 | 0.06 | 5.4 % | 0.0 % |
+| L | 5–12 | QuTiP sweep | [F] | [F] | [F] | [F] |
+| L | 5–12 | ideal MIS | 1.00 | 1.00 | 9.7 % | 3.0 % |
+| L | 5–12 | oracle | 0.80 | 0.80 | 12.6 % | 7.8 % |
+| L | 5–12 | random bitstrings | 0.15 | 0.03 | 9.9 % | 1.7 % |
 
-Three observations. **Raw feasibility tracks the embedding.** L-0003 has 8 of 26 overlap edges realised
-below $\delta_f$ and 24 % of its shots are valid packings; L-0001 and M-0002 have none and 100 %.
-**The sweep beats the exact ground state** (M: 6.5 % vs 12.8 % mean gap): the sweep also samples low
-excited states and the pipeline keeps the best feasible shot — the brief's point that one good shot is
-what matters, and the reason pulses are scored per shot. **Against random bitstrings through identical
-post-processing**, the register wins where the device does its job — maximum packings per shot, 0.47 vs
-0.01 on L and 0.68 vs 0.07 on M — while on the final gap random best-of-500 ties on M and is better on one
-L instance (2.8 %): at ≤ 10 atoms a maximum independent set is hit by luck in a few percent of random
-strings, and the greedy completion is strong. The quantum part is a per-shot advantage of roughly 10–50× in
-valid maximum packings, not a solution-quality advantage at these sizes; I report both. Model gaps (clustering objective vs its constrained
-optimum) are larger than CVRP gaps on every tier: the packing optimises compactness through candidate
-construction, not the pairwise objective, and the exact routing step forgives it. Decomposition loss of
-cluster-first / route-second is 1–16 % by itself. Tier S is degenerate for this model (candidates hold 1–2
-customers, so the device solves nothing that the completion step cannot) and is covered instead by the
-exhaustive ground-state checks of §6.
+Four observations. **The classical completion, not the sampler, sets the final gap.** The exact
+completion lowers every row by 3–8 points, and under it random bitstrings reach 0–1.7 %: with ≤ 8
+uncovered customers the exhaustive completion is itself a near-complete solver, and a random shot
+(coverage 0.4–0.6) hands it most of the problem. Under the greedy completion the ideal register and
+random bitstrings tie (9.7 % vs 9.9 % on L). At ≤ 12 atoms there is no completion strength at which the
+quantum sampler wins on final route length, and we say so. **Where the register wins is per shot**:
+60–100 % of its ground states are valid maximum packings against 3–6 % of random bitstrings on M and L,
+a 10–30× advantage in the quantity the device is asked for. **Raw feasibility tracks the embedding**:
+instances with 0 violable overlap edges give 100 % valid packings, one with 8 of 26 gives ~25 %.
+**The sweep beats the exact ground state** (M, first session: 6.5 % vs 12.8 % under the greedy
+completion) because it also samples low excited states and the pipeline keeps the best — the reason
+pulses are scored per shot, not by mean energy.
 
-![Pulse-shaping study: probability that a shot is a maximum packing versus sweep duration (left: all instances by $\Omega_{\max}$ and detuning shape; right: per tier at $\Omega_{\max}=2$ rad/µs).](figs/pulse_sweep.png){width=88%}
+Tier S is degenerate for this model (candidates hold 1–2 customers). Under the exact completion the
+model gap equals the CVRP gap, since set partitioning with exact tour costs is the CVRP itself.
 
-![Register for L-0000 (left: atoms = candidate clusters, blockade discs at $\delta_f$, overlap edges green if realised above $\delta_f$, red dashed if violable, red atoms = best shot) and the resulting clusters routed exactly (right).](figs/register_L-0000_qutip.png){width=82%}
+![Pulse-shaping study: probability that a shot is a maximum packing versus sweep duration (left: all instances by $\Omega_{\max}$ and detuning shape; right: per tier at $\Omega_{\max}=2$ rad/µs).](figs/pulse_sweep.png){width=80%}
+
 
 ## 6. What did not work
 
@@ -167,7 +174,14 @@ exhaustive ground-state checks of §6.
   too weak a model: even the ideal MIS gives mean gaps of 10–16 % (M) and 21–24 % (L).
 * **Richer candidate pools** (two fill levels per centre, grid centres) raise coverage on paper and destroy
   the embedding: overlap cliques, 23 of 51 edges violable, 0 % raw feasibility.
-* Not attempted: DMM-weighted packing (emulation only), Track B.
+* **Petal (angular-window) candidates**, the shape of optimal routes around a central depot: coverage up
+  (0.91), gap not (ideal 5.3 % vs 4.8 % for balls on the first 5 L instances), and mixed with balls the
+  overlap graph gets 5–15 violable edges on 12 atoms.
+* **Savings-weighted maximum-weight IS** (what the DMM would implement; `AnalogDevice` has no DMM,
+  `DigitalAnalogDevice` has `dmm_0`): *worse* than uniform MIS even for a perfect device, L 8.7 % vs
+  4.8 %, M 5.6 % vs 2.7 %. Every candidate the device fixes is a constraint on the exact completion, and
+  weighting fixes bigger ones. The DMM sequence was therefore not built.
+* Not attempted: Track B.
 
 ## 7. Reproduction and AI use
 

@@ -158,3 +158,30 @@ L at 6 us (+0.11 at Omega 2), neutral on M. Raw feasibility 0.57-0.83 regardless
 * DMM variant (emulation only): per-candidate detuning proportional to candidate compactness,
   i.e. maximum-weight packing; label separately.
 * Track B (if time): edge-based 2-factor TSP encoding, n <= 4 subtour-free lemma, k-NN pruning.
+
+## 11. Second session (Sat 15:40-17:40): what moved the gap and what did not
+
+Diagnosis: ideal-MIS gap == QuTiP gap on M and L, so the model, not the physics, set the gap.
+
+**Adopted: exact-cost classical steps (v2).** Leftovers placed by exhaustive assignment with
+exact tour costs; best shot by exact routed cost. On the first 5 instances/tier (classical
+samplers): L ideal 14.7 -> 4.8 %, oracle 17.9 -> 8.1 %; M ideal/oracle 6.5 -> 2.7 %.
+The same completion lifts random bitstrings to 1.3 % (L) and 0.0 % (M): with an exhaustive
+completion of <= 8 leftovers the sampler barely matters at these sizes. Reported as such.
+
+**Measured, not adopted.**
+* Petal (angular-window) candidates: ideal gap 5.3 % (petals only) / 6.4 % (petals + balls)
+  vs 4.8 % for balls on L; coverage up (0.91), gap not; petals + balls make the overlap graph
+  dense (27-35 edges on 12 atoms, 5-15 violable) and the oracle raw feasibility drops to 0-0.2.
+* Savings-weighted maximum-weight IS (what the DMM would implement; AnalogDevice has no DMM,
+  DigitalAnalogDevice has dmm_0 with bottom detuning -125.7 rad/us): at the IDEAL level it is
+  worse than uniform MIS, L 8.7 % vs 4.8 %, M 5.6 % vs 2.7 %. Higher coverage, worse gap: every
+  candidate the device fixes is a constraint on the exact completion, and weighting fixes bigger
+  ones. The pulser DMM sequence was therefore not built (keep-or-drop rule).
+* Fill level: 0.7 gives 3.0 % ideal on L but 13 atoms and oracle raw feasibility 0.6; 0.85 stays.
+
+**Honest conclusion for the report.** At <= 12 atoms the register is a reliable sampler of valid
+maximum packings (per-shot advantage over random bitstrings of 10-50x), but the end-to-end gap is
+set by the classical completion, and a strong completion makes the sampler irrelevant. The useful
+quantum contribution would need registers where enumerating packings is not trivial, i.e. far
+beyond 80 atoms for this encoding.

@@ -54,6 +54,23 @@ No slack variables, no penalty weight to tune: the only knobs are `fill` and the
 near-duplicate threshold `max_jaccard` (dense overlap cliques are unrealisable: a clique must
 sit entirely inside one blockade disc).
 
+## v2 (Phase 1 of the second session): exact-cost classical steps
+
+`qcvrp/completion.py` + `qcvrp/pipeline_v2.py`: leftover customers are placed by exhaustive
+assignment with exact tour costs (optimal given the chosen candidates when <= 8 customers are
+uncovered), and the best shot is chosen by exact routed cost. `scripts/run_final.py` samples each
+(instance, sampler, seed) once and post-processes the same shots both ways (`+greedy` = v1,
+`+exact` = v2), so the effect of the classical completion is isolated in `results/final.csv`.
+Measured and **not** adopted (code kept as evidence): petal (angular-window) candidates
+(`qcvrp/models_v2.py`), savings-weighted maximum-weight IS (`ideal-mwis` / `oracle-weighted`
+samplers; would need the DMM, which `AnalogDevice` lacks). See `report/notes.md` section 11.
+
+```bash
+python scripts/make_instances.py --seeds $(seq 0 19)                      # 20 instances per tier
+python scripts/run_final.py --samplers ideal-mis oracle random --runs 3 --out results/final.csv
+python scripts/run_final.py --samplers qutip --runs 3 --shots 500 --out results/final.csv --append   # Mac
+```
+
 ## Samplers
 
 * `ideal-mis` — all maximum independent sets of the target graph (model quality, no physics)

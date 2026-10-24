@@ -156,7 +156,7 @@ def summarize(rows: list[dict]) -> str:
         feas = g["feasible"].astype(bool)
         gf = g[feas]
         out.append(
-            f"{tier} {method[:28]:28s} {sampler:9s} runs={len(g):3d} feasible={feas.mean():.2f} "
+            f"{tier} {method[:40]:40s} {sampler:9s} runs={len(g):3d} feasible={feas.mean():.2f} "
             f"repaired={g['repaired'].mean():.2f} raw_feas={g['feasibility_rate_raw'].mean():.2f} "
             f"P(MIS/shot)={g['p_mis_shot'].mean():.2f} cov={g['coverage_best'].mean():.2f} | "
             f"CVRP gap mean={gf['cvrp_gap_pct'].mean():6.2f}% best={gf['cvrp_gap_pct'].min():6.2f}% "
