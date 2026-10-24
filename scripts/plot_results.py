@@ -37,6 +37,8 @@ COLORS = {"ideal-mis": "#4C72B0", "oracle": "#55A868", "qutip": "#C44E52", "emu-
 
 def plot_results(csv_path: Path, out: Path):
     df = pd.read_csv(csv_path)
+    if df["method"].astype(str).str.endswith("+exact").any():
+        df = df[df["method"].astype(str).str.endswith("+exact")]   # final.csv: plot the exact-completion rows
     for col in ("cvrp_gap_pct", "p_mis_shot", "feasibility_rate_raw", "coverage_best"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df["feasible"] = df["feasible"].astype(str).str.lower().isin(["true", "1"])

@@ -71,27 +71,38 @@ violable edges = raw feasibility collapses (tested: 23/51 edges violable, 0 % ra
   the empty register). Score by feasibility rate / P(max packing) / best gap — never mean energy.
   "slow-end" puts 70 % of the sweep on the positive side because that is where the gap closes for MIS.
 
-## 6. References and gaps
+## 6. References, gaps, completion
 
 * CVRP reference: Held–Karp over every subset ($2^N \times N$ states) gives the exact tour of every
   possible cluster; set-partitioning IP over ALL capacity-feasible subsets (HiGHS) gives the proven
-  optimum. Brute-force enumeration cross-checks S and M and counts distinct optima (clusterings compared as
-  sets of groups — Pitfall 9.3). So every gap is against a proven optimum, not a best-known.
-* Gap levels: model gap (clustering objective of best feasible shot vs constrained-model optimum), CVRP
-  gap (best shot routed exactly vs CVRP optimum), decomposition gap (model optimum routed exactly vs
-  CVRP optimum) = the price of cluster-first/route-second itself.
-* Selection rule: best raw-feasible shot (independent set, ≤ K candidates, most kept, then objective);
-  repair only as fallback, flagged. `cvrp_gap_pct_any` is the classical-completion number, reported for
-  honesty.
+  optimum. Brute-force enumeration cross-checks S and M and counts distinct optima; Kevin's DP
+  cross-checks L. So every gap is against a proven optimum, not a best-known.
+* Completion (the classical step after the shot), two strengths, both reported: *greedy* (leftovers to
+  the cheapest cluster with slack by pairwise distance) and *exact* (every assignment of ≤ 8 leftovers to
+  the K vehicles, scored by exact tour cost; optimal given the device's candidates). The device's chosen
+  candidates are never altered; if the device lit more than K, every K-subset is tried.
+* Selection: best raw-feasible shot (independent set, ≤ K candidates) by exact routed cost; repaired
+  shots only as fallback, flagged. `cvrp_gap_pct_any` = best over all shots, reported for honesty.
+* Under the exact completion, model gap = CVRP gap (set partitioning with tour costs IS the CVRP).
 
-## 7. The honest answers
+## 7. The honest answers (updated with the 20-instance results)
 
-* "Does the quantum part do anything?" Per shot, yes: 80–100 % of register ground states are valid maximum
-  packings versus 1–7 % of random bitstrings. On the final gap, best-of-500 random strings through the
-  same completion step is competitive at these sizes — the completion is strong and a MIS on ≤ 10 atoms
-  is found by luck in a few percent of strings. I show both.
-* "Why is the model gap so big?" The packing optimises compactness through candidate construction, not
-  the pairwise objective; the exact routing forgives it (CVRP gap is smaller than model gap on every tier).
-* "Why not emu-mps?" Registers are ≤ 10 atoms; QuTiP is exact, so there is no bond dimension to report.
-* "Where did AI help?" Everywhere (brainstorm, derivation drafts, code, report draft); I re-ran and re-derived
-  everything; the device checks that caught my own errors are in the repo (`check_pulser.py`).
+* "Does the quantum part do anything?" Per shot, yes: 60–100 % of register ground states are valid
+  maximum packings vs 3–6 % of random bitstrings on M/L (10–30×). On final route length, no: under
+  the greedy completion the ideal register ties random (9.7 vs 9.9 % on L); under the exact completion
+  random wins (1.7 vs 3.0 %) because low-coverage shots hand the exhaustive completion most of the
+  problem. At ≤ 12 atoms the completion sets the gap. We show both; we don't hide it.
+* "Then why bother?" The brief says no device beats a tuned classical solver and that is not what is
+  measured. What we show: a formulation where the inequality never reaches the device, 2–12 atoms
+  instead of 14–80, exact emulation on every tier, feasibility that tracks a measurable embedding
+  metric, and a clean pulse-adiabaticity curve. And a measured ceiling: where the quantum step stops
+  mattering.
+* "Why not weight candidates (DMM)?" We computed the ideal maximum-weight packing: worse than
+  uniform (L 8.7 vs 4.8 %). Fixing bigger candidates constrains the completion more. So we didn't
+  build it. `AnalogDevice` has no DMM anyway; `DigitalAnalogDevice` does (emulation only).
+* "Why not petals?" Tried: coverage up, gap not, embedding worse when mixed with balls.
+* "Why is the oracle worse than the sweep?" The oracle returns only exact ground states; the sweep also
+  returns low excited states, and best-of-500 picks a better one. Score pulses per shot.
+* "Why not emu-mps?" Registers are ≤ 12 atoms; QuTiP is exact; no bond dimension to report.
+* "Where did AI help?" Everywhere (brainstorm, derivation drafts, code, report draft); we re-ran and
+  re-derived everything; the device checks that caught our errors are in the repo (`check_pulser.py`).
