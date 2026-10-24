@@ -1,0 +1,80 @@
+{
+  "tier": "M",
+  "seed": 17,
+  "N": 10,
+  "K": 3,
+  "Q": 20,
+  "depot": [
+    50.0,
+    50.0
+  ],
+  "coords": [
+    [
+      84.5075,
+      16.0973
+    ],
+    [
+      55.7745,
+      36.808
+    ],
+    [
+      21.4942,
+      38.5824
+    ],
+    [
+      42.8164,
+      61.1343
+    ],
+    [
+      73.6386,
+      1.529
+    ],
+    [
+      25.4041,
+      60.4146
+    ],
+    [
+      8.3737,
+      99.7764
+    ],
+    [
+      83.2346,
+      3.6777
+    ],
+    [
+      56.754,
+      60.934
+    ],
+    [
+      0.6927,
+      17.9084
+    ]
+  ],
+  "demands": [
+    4,
+    2,
+    5,
+    4,
+    4,
+    5,
+    2,
+    4,
+    6,
+    8
+  ],
+  "certificate": [
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    2,
+    2,
+    0,
+    0
+  ],
+  "feasibility_method": "exact bin-packing search (largest-first DFS, equal-load symmetry breaking); draws without a feasible packing are rejected; the packing found is the certificate",
+  "load_ratio": 0.7333333333333333,
+  "dmax_ratio": 0.4
+}

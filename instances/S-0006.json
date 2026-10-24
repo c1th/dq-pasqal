@@ -1,0 +1,44 @@
+{
+  "tier": "S",
+  "seed": 6,
+  "N": 4,
+  "K": 2,
+  "Q": 7,
+  "depot": [
+    50.0,
+    50.0
+  ],
+  "coords": [
+    [
+      53.8164,
+      34.3271
+    ],
+    [
+      36.9067,
+      37.4497
+    ],
+    [
+      98.7445,
+      63.2756
+    ],
+    [
+      67.4324,
+      32.9963
+    ]
+  ],
+  "demands": [
+    3,
+    3,
+    2,
+    1
+  ],
+  "certificate": [
+    0,
+    0,
+    1,
+    0
+  ],
+  "feasibility_method": "exact bin-packing search (largest-first DFS, equal-load symmetry breaking); draws without a feasible packing are rejected; the packing found is the certificate",
+  "load_ratio": 0.6428571428571429,
+  "dmax_ratio": 0.42857142857142855
+}

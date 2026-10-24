@@ -73,9 +73,58 @@ def ideal_mis_sampler(target: CouplingTarget, emb: Embedding, delta: float, n_sh
     return counts
 
 
+def ideal_mwis_sampler(target: CouplingTarget, emb: Embedding, delta: float, n_shots: int,
+                       rng: np.random.Generator, weights: np.ndarray | None = None, **kw) -> dict[str, int]:
+    """All maximum-WEIGHT independent sets of the TARGET graph (ignores the embedding).
+
+    weights: per-atom weights (>= 0); default target.weights, else uniform (= ideal-mis).
+    This is what a perfect device with per-atom detuning proportional to the weights
+    would return: the ideal of the DMM-weighted (emulation-only) variant.
+    """
+    n = target.n_atoms
+    if n > 22:
+        raise ValueError("too many atoms for exact MWIS enumeration")
+    if weights is None:
+        weights = getattr(target, "weights", None)
+    w = np.ones(n) if weights is None else np.asarray(weights, float)
+    ints = np.arange(1 << n, dtype=np.int64)
+    bits = ((ints[:, None] >> (n - 1 - np.arange(n))[None, :]) & 1).astype(np.int8)
+    iu = np.triu_indices(n, 1)
+    edge = target.J[iu] > 0
+    conflict = (bits[:, iu[0][edge]] & bits[:, iu[1][edge]]).any(axis=1) if edge.any() else np.zeros(len(ints), bool)
+    value = bits.astype(float) @ w
+    value = np.where(conflict, -np.inf, value)
+    best = value.max()
+    idx = np.flatnonzero(value >= best - 1e-9)
+    counts: dict[str, int] = {}
+    for i, j in enumerate(idx):
+        counts["".join(str(int(v)) for v in bits[j])] = n_shots // len(idx) + (1 if i < n_shots % len(idx) else 0)
+    return counts
+
+
+def oracle_weighted_sampler(target: CouplingTarget, emb: Embedding, delta: float, n_shots: int,
+                            rng: np.random.Generator, deltas: np.ndarray | None = None, **kw) -> dict[str, int]:
+    """Exact ground state(s) of the realised register with PER-ATOM final detunings
+    (what a perfect sweep with the DMM would return)."""
+    from .embedding import diagonal_energies
+    d = np.asarray(deltas if deltas is not None else getattr(target, "deltas", None), float)
+    n = target.n_atoms
+    E, bits = diagonal_energies(emb.U, 0.0)
+    E = E - bits.astype(float) @ d
+    m = E.min()
+    idx = np.flatnonzero(E <= m + 1e-9)
+    gs = ["".join(str(int(v)) for v in bits[i]) for i in idx]
+    counts: dict[str, int] = {}
+    for i, b in enumerate(gs):
+        counts[b] = n_shots // len(gs) + (1 if i < n_shots % len(gs) else 0)
+    return counts
+
+
 SAMPLERS = {
     "random": random_sampler,
     "oracle": oracle_sampler,
     "boltzmann": boltzmann_sampler,
     "ideal-mis": ideal_mis_sampler,
+    "ideal-mwis": ideal_mwis_sampler,
+    "oracle-weighted": oracle_weighted_sampler,
 }
