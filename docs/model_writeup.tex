@@ -1,0 +1,393 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% ---------- notation ----------
+\newcommand{\C}{\mathcal{C}}      % customers
+\newcommand{\V}{\mathcal{V}}      % locations (depot + customers)
+\newcommand{\K}{\mathcal{K}}      % vehicles
+\renewcommand{\labelitemii}{$\circ$} 
+
+\title{Capacity-Feasible Clustering for the CVRP on a Neutral-Atom Analog Device\\
+\large DuQuantum $\times$ Pasqal Challenge --- Track A --- Model write-up}
+\author{Team: Alex and Bob (Alex Wang, Christopher Thai)}
+\date{Date: 10/25/2026}
+
+\begin{document}
+\maketitle
+
+% =========================================================
+\section{Problem formulation}
+\label{sec:formulation}
+
+We state the full Capacitated Vehicle Routing Problem (CVRP) first. Every later modeling choice (Sec.~\ref{sec:trackA} onward) is stated as a modification of this model.
+
+\subsection{Sets}
+\begin{itemize}
+  \item $\C = \{1,\dots,N\}$: customers.
+  \item $\V = \{0\} \cup \C$: all locations; $0$ denotes the depot.
+  \item $\K = \{1,\dots,K\}$: vehicles (identical).
+\end{itemize}
+
+\subsection{Parameters}
+\begin{itemize}
+  \item $p_i = (x_i, y_i) \in [0,100]^2$, $i \in \V$: location of node $i$; the depot location $p_0$ is fixed at $(50, 50)$ before clustering.
+   \begin{itemize}
+        \item $x_i$: $x$-coordinate of node $i$.
+        \item $y_i$: $y$-coordinate of node $i$.
+    \end{itemize}
+  \item $d_i \in \mathbb{Z}_{>0}$, $i \in \C$: demand of customer $i$, with $d_i \le Q$ (Assumption 5: no customer's demand exceeds the vehicle capacity).
+  \item $Q \in \mathbb{Z}_{>0}$: capacity of every vehicle.
+  \item $K \in \mathbb{Z}_{>0}$: fleet size (fixed; vehicles may be unused).
+  \item $c_{ij} = \sqrt{(x_i-x_j)^2+(y_i-y_j)^2}$, $i,j \in \V$: travel cost; symmetric and satisfies the triangle inequality.
+\end{itemize}
+
+\subsection{Decision variables}
+\begin{itemize}
+  \item $a_{ik} \in \{0,1\}$, $i \in \C$, $k \in \K$: $a_{ik}=1$ iff vehicle $k$ serves customer $i$ (assignment / clustering).
+  \item $e_{ijk} \in \{0,1\}$, $i,j \in \V$, $i \ne j$, $k \in \K$: $e_{ijk}=1$ iff vehicle $k$ travels directly from $i$ to $j$ (edge / routing).
+\end{itemize}
+
+\subsection{Objective}
+Minimize the total distance driven by the fleet:
+\begin{equation}
+  \min_{a,\,e} \; \sum_{k \in \K} \sum_{i \in \V} \sum_{\substack{j \in \V \\ j \ne i}} c_{ij}\, e_{ijk}.
+  \label{eq:obj}
+\end{equation}
+
+\subsection{Constraints}
+\begin{align}
+  \sum_{k \in \K} a_{ik} &= 1
+    && \forall i \in \C
+    && \text{(equality: each customer served exactly once)} \tag{C1}\label{c:assign}\\
+  \sum_{i \in \C} d_i\, a_{ik} &\le Q
+    && \forall k \in \K
+    && \text{(inequality: capacity)} \tag{C2}\label{c:cap}\\
+  \sum_{j \in \V,\, j \ne i} e_{ijk} &= a_{ik}
+    && \forall i \in \C,\ k \in \K
+    && \text{(equality: leave $i$ iff served by $k$)} \tag{C3}\label{c:out}\\
+  \sum_{j \in \V,\, j \ne i} e_{jik} &= a_{ik}
+    && \forall i \in \C,\ k \in \K
+    && \text{(equality: enter $i$ iff served by $k$)} \tag{C4}\label{c:in}\\
+  \sum_{j \in \C} e_{0jk} &\le 1
+    && \forall k \in \K
+    && \text{(inequality: at most one trip per vehicle)} \tag{C5}\label{c:depot}\\
+  \sum_{\substack{i,j \in S \\ i \ne j}} e_{ijk} &\le |S| - 1
+    && \forall S \subseteq \C,\ |S| \ge 2,\ k \in \K
+    && \text{(inequality: subtour elimination)} \tag{C6}\label{c:subtour}\\
+  e_{ijk},\ a_{ik} &\in \{0,1\}
+    && && \text{(binary domains)} \tag{C7}\label{c:bin}
+\end{align}
+
+\paragraph{Remarks.}
+(i) Flow balance at the depot, $\sum_{j} e_{0jk} = \sum_{j} e_{j0k}$, is implied by
+\eqref{c:out}--\eqref{c:in}: every arc has one tail and one head, and customer in- and
+out-degrees are equal, so the depot's are too.
+(ii) \eqref{c:subtour} forbids any cycle among customers that avoids the depot; combined
+with \eqref{c:out}--\eqref{c:depot}, each used vehicle drives exactly one closed tour
+through the depot.
+(iii) \eqref{c:subtour} has exponentially many members; it is used only for the
+formulation and the classical reference, never on the device.
+(iv) The two constraints that matter for the device have different types:
+\eqref{c:assign} is an equality with a single target value, while \eqref{c:cap} is an
+inequality satisfied by every load in $[0,Q]$. This asymmetry drives the encoding
+choices in Sec.~\ref{sec:encoding}.
+
+\subsection{Assumptions and where they are enforced}
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\# & Assumption (challenge brief, Sec.~2) & Enforced by \\
+\midrule
+1 & Depot location fixed before clustering & Parameter $p_0$ \\
+2 & Symmetric costs, triangle inequality & Parameter $c_{ij}$ (Euclidean) \\
+3 & Single vehicle, single visit, no split delivery & \eqref{c:assign}, \eqref{c:out}, \eqref{c:in} \\
+4 & One trip per vehicle, no mid-route reload & \eqref{c:depot}, \eqref{c:subtour} \\
+5 & $d_i \le Q$ for all $i$ & Instance generator (Sec.~\ref{sec:instances}) \\
+6 & Fixed $K$; unused vehicles allowed at zero cost & Set $\K$; \eqref{c:depot} is $\le 1$, not $= 1$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Capacity-feasible clustering}
+\label{sec:trackA}
+Under cluster-first/route-second, Track A decides only $a$; the routing variables $e$ and
+\eqref{c:out}--\eqref{c:subtour} are solved afterwards by an exact classical TSP, used only
+to evaluate the CVRP gap. This decomposition is a heuristic (brief, Pitfall~2.1).
+
+\paragraph{Register fleet size.} Let $D=\sum_i d_i$ and
+\[
+  K_{\min}=\min\{K'\in\{1,\dots,K\} : \text{some } a \text{ with } K' \text{ vehicles satisfies \eqref{c:assign}--\eqref{c:cap}}\},
+\]
+the exact bin-packing number of the demands; $K_{\min}\ge\lceil D/Q\rceil$, and the inequality can be strict
+(e.g.\ three demands of $2$ with $Q=3$ need three bins although $\lceil 6/3\rceil=2$). $K_{\min}$ is well defined
+exactly when the instance is feasible, and an assignment using $K_{\min}$ vehicles is also a valid plan for
+the full fleet, with vehicles $k>K_{\min}$ unused (Assumption~6). We compute $K_{\min}$ exactly per instance
+(Sec.~\ref{sec:instances}) and model only $K'=K_{\min}$ vehicles, so the clustering model always has a feasible
+solution and every feasible shot is a valid CVRP plan. The CVRP reference is computed with the full fleet $K$,
+not $K_{\min}$.
+
+\paragraph{Objective.} We minimize the within-vehicle pairwise distance:
+\begin{equation}
+  \min_{a}\; f(a)=\sum_{k=1}^{K'}\sum_{i<j} c_{ij}\,a_{ik}a_{jk}
+  \quad \text{s.t.} \quad \eqref{c:assign},\ \eqref{c:cap},\ a_{ik} \in \{0,1\},\ k\le K'.
+  \label{eq:cluster}
+\end{equation}
+Its weights are non-negative, so it maps onto positive Rydberg couplings with no linear term
+(Sec.~\ref{sec:encoding}). For any non-negative pairwise objective, moving a customer to an empty vehicle never
+increases its value, so some minimizer spreads customers over every available vehicle, whereas by the triangle inequality merging two tours (when capacity permits) never increases
+route cost; sizing the register to $K_{\min}$ largely removes this mismatch and also minimizes the atom count.
+% TODO: insert our own measured numbers (pair-K vs pair-K_min vs savings decomposition gap, tier M),
+%       only after re-running the study script ourselves.
+The model gap (Sec.~\ref{sec:results}) is measured against the optimum of \eqref{eq:cluster} with $K'=K_{\min}$.
+
+% =========================================================
+\section{Encoding and variable accounting}
+\label{sec:encoding}
+
+\subsection{What the register minimizes}
+In the analog (Ising) mode the register evolves under
+\begin{equation}
+  \frac{H(t)}{\hbar}=\sum_m \frac{\Omega(t)}{2}\hat\sigma^x_m-\delta(t)\sum_m \hat n_m
+  +\sum_{m<m'}U_{mm'}\,\hat n_m\hat n_{m'},\qquad U_{mm'}=\frac{C_6}{\lVert \mathbf r_m-\mathbf r_{m'}\rVert^6},
+\end{equation}
+where $\mathbf r_m$ is the position of atom $m$. With $\Omega=0$ at the end of the sweep every operator is
+diagonal, so a measured bitstring $n\in\{0,1\}^M$ has the classical cost
+\begin{equation}
+  E(n)=-\delta\sum_m n_m+\sum_{m<m'}U_{mm'}\,n_m n_{m'} .
+  \label{eq:register}
+\end{equation}
+This is a QUBO in which the linear coefficient $-\delta$ is set by the (global) laser detuning and is
+\emph{identical for every atom}, while the couplings are set by the atom positions and are
+\emph{strictly positive}, decay as $r^{-6}$, and cannot be made exactly zero; $C_6$ is fixed. A target
+QUBO is therefore directly realizable only if all its couplings are $\ge 0$ and all its linear coefficients
+are equal (up to positive scaling and a constant). With AnalogDevice, $U\le C_6/(5\,\mu\mathrm m)^6\approx 55.4$~rad/$\mu$s
+and $|\delta|\le125.66$~rad/$\mu$s.
+
+\subsection{Textbook formulation: binary slack}
+Each capacity inequality becomes $L_k+\sum_{b} w_b s_{kb}=Q$ with $L_k=\sum_i d_i a_{ik}$, slack bits
+$s_{kb}\in\{0,1\}$, weights $w_b=2^b$ and $m_Q=\lceil\log_2(Q+1)\rceil$ bits per vehicle, penalized by
+$B\sum_k\big(L_k+\sum_b w_b s_{kb}-Q\big)^2$ alongside the assignment penalty. Using $b^2=b$ for binary variables, expanding gives
+positive couplings $2Bd_id_j$, $2Bd_iw_b$ and $2Bw_bw_{b'}$ (each vehicle's atoms become fully connected)
+and linear coefficients $B\,d_i(d_i-2Q)$ and $B\,w_b(w_b-2Q)$ that differ from atom to atom. It costs
+$K m_Q$ extra atoms and is not realizable with a global detuning.
+
+\subsection{Our formulation}
+One atom per assignment variable $a_{ik}$, $k\le K'$, with
+\begin{equation}
+  H(a)=f(a)+\sum_i A_i\Big(1-\sum_{k}a_{ik}\Big)^2+\lambda_2\sum_{k}\big(L_k^2-2QL_k\big).
+  \label{eq:qubo}
+\end{equation}
+\paragraph{Capacity penalty and the choice $\lambda_1=0$.}
+The capacity term is a slack-free quadratic penalty. We start from the unbalanced penalization of
+Monta\~nez-Barrera et al.~\cite{montanez2024unbalanced}, applied to the leftover room $h_k=Q-L_k$ of each vehicle, where $h_k\ge0$ means vehicle $k$ is within capacity,
+\begin{equation}
+  P(h_k)=-\lambda_1 h_k+\lambda_2 h_k^2,\qquad \lambda_1,\lambda_2\ge 0 .
+\end{equation}
+Substituting $h_k=Q-L_k$,
+\begin{align*}
+  P(h_k) &= -\lambda_1(Q-L_k)+\lambda_2(Q-L_k)^2\\
+         &= -\lambda_1Q+\lambda_1L_k+\lambda_2Q^2-2\lambda_2QL_k+\lambda_2L_k^2\\
+         &= \lambda_2L_k^2+(\lambda_1-2\lambda_2Q)L_k+(\lambda_2Q^2-\lambda_1Q),
+\end{align*}
+and summing over the $K'$ vehicles, where the constant appears once per vehicle,
+\begin{equation}
+  \sum_{k}P(h_k)=\lambda_2\sum_k L_k^2+(\lambda_1-2\lambda_2Q)\sum_k L_k+K'(\lambda_2Q^2-\lambda_1Q).
+  \label{eq:unbalanced}
+\end{equation}
+Under \eqref{c:assign} the total load is fixed:
+\begin{equation}
+  \sum_k L_k=\sum_k\sum_i d_i a_{ik}=\sum_i d_i\sum_k a_{ik}=\sum_i d_i=D .
+\end{equation}
+Hence, for every assignment satisfying \eqref{c:assign}, \eqref{eq:unbalanced} equals
+$\lambda_2\sum_k L_k^2+(\lambda_1-2\lambda_2Q)D+K'(\lambda_2Q^2-\lambda_1Q)$, and $\lambda_1$ enters only through
+the constant $\lambda_1(D-K'Q)$. This constant is identical for every valid clustering, so $\lambda_1$ cannot
+change their energy ordering. On states violating \eqref{c:assign}, $\lambda_1$ only adds $\lambda_1 d_i$ to the
+linear coefficient of each $a_{ik}$, which the choice of $A_i$ below would absorb. For any $\lambda_1$, once the $A_i$ are large enough that every
+ground state satisfies \eqref{c:assign}, $\lambda_1$ does not affect the ground state; we set $\lambda_1=0$, for which
+Sec.~\ref{sec:weights} gives such a bound. This removes one hyperparameter without loss of generality.
+
+By the same argument, the term $-2\lambda_2Q\sum_kL_k$ is also constant on valid clusterings. We keep it because,
+up to a constant, it makes the capacity term the squared distance of each load from full capacity,
+$\lambda_2\sum_k(L_k^2-2QL_k)=\lambda_2\sum_k(L_k-Q)^2-\lambda_2K'Q^2$, and the $A_i$ and $\delta$ below are derived with it.
+
+On valid clusterings the penalty therefore acts only through $\lambda_2\sum_kL_k^2$. With $\sum_kL_k=D$ fixed,
+\begin{equation}
+  \sum_k L_k^2=\frac{D^2}{K'}+\sum_k\Big(L_k-\frac{D}{K'}\Big)^2 ,
+\end{equation}
+so it penalizes the spread of loads around their mean $D/K'$. Because $K'=K_{\min}\ge\lceil D/Q\rceil$,
+the mean satisfies $D/K'\le Q$: perfectly balanced loads would be feasible. Integer demands and the
+competing distance objective $f(a)$ prevent exact balance, so loads stay below $Q$ in most but not all
+instances. Capacity is therefore soft, and we report the feasibility rate. In terms of atoms,
+$L_k^2=\sum_i d_i^2a_{ik}+2\sum_{i<j}d_id_j\,a_{ik}a_{jk}$ contributes positive couplings $2\lambda_2 d_id_j$
+within each vehicle and linear coefficients $\lambda_2 d_i(d_i-2Q)$.
+
+Expanding with $a^2=a$, the linear coefficient of $a_{ik}$ is $-A_i+\lambda_2 d_i(d_i-2Q)$. Choosing
+\begin{equation}
+  A_i=A+\lambda_2\Big[d_i(d_i-2Q)-\min_j d_j(d_j-2Q)\Big]\ \ge A
+\end{equation}
+makes every linear coefficient equal to $-\delta$ with $\delta=A+\lambda_2\max_j d_j(2Q-d_j)$, so a global
+detuning suffices and no DMM is needed. The resulting coefficients are:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Term & Coefficient \\
+\midrule
+Linear, every $a_{ik}$ & $-\delta$ (identical) \\
+$a_{ik}a_{il}$, same customer, $k\ne l$ & $2A_i$ \\
+$a_{ik}a_{jk}$, same vehicle, $i\ne j$ & $c_{ij}+2\lambda_2 d_id_j$ \\
+$a_{ik}a_{jl}$, $i\ne j$, $k\ne l$ & $0$ \\
+Constant & $\sum_i A_i$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+All couplings are non-negative. The target zeros cannot be realized exactly; they appear as small residual
+couplings and are part of the embedding error (Sec.~\ref{sec:embedding}). Fixing a customer to a vehicle would break the vehicle-relabeling symmetry and save $K'$ atoms, but it would make the linear coefficients non-uniform again, so we do not do it.
+
+\subsection{Penalty weights}
+\label{sec:weights}
+Let $\Gamma_i=\sum_{j\ne i}(c_{ij}+2\lambda_2 d_id_j)$.
+ 
+\medskip\noindent\textbf{Claim.} \emph{If $\lambda_2\ge0$ and $\forall i$ we have}
+\begin{equation}
+  A_i>\max\big(\Gamma_i,\ \lambda_2 d_i(2Q-d_i)\big),
+  \label{eq:Abound}
+\end{equation}
+\emph{then no ground state of \eqref{eq:qubo} violates \eqref{c:assign}.}
+ 
+\begin{proof}
+Let $a$ violate \eqref{c:assign} for some customer $i$, and let $s=\sum_k a_{ik}\ne1$. We exhibit a state
+$a'$, differing from $a$ in the single variable $a_{ik}$, with $H(a')<H(a)$. Changing $a_{ik}$ alters only
+three terms of \eqref{eq:qubo}: the assignment penalty of customer $i$, the pairs of $f$ that contain
+$a_{ik}$, and the capacity term of vehicle $k$. Write $L_k$ for the load of vehicle $k$ in $a$.
+ 
+\emph{Case $s=0$.} Choose any vehicle $k$ and set $a_{ik}=1$. The assignment penalty of customer $i$ drops
+from $A_i$ to $0$. The objective $f$ increases by $\sum_{j\ne i}a_{jk}c_{ij}$. Since customer $i$ is not on
+vehicle $k$, $L_k=\sum_{j\ne i}d_ja_{jk}$, and the capacity term changes by
+\begin{align*}
+  &\lambda_2\big[(L_k+d_i)^2-2Q(L_k+d_i)\big]-\lambda_2\big[L_k^2-2QL_k\big]\\
+  &\quad=\lambda_2\big[L_k^2+2L_kd_i+d_i^2-2QL_k-2Qd_i-L_k^2+2QL_k\big]\\
+  &\quad=2\lambda_2d_iL_k+\lambda_2d_i(d_i-2Q)\\
+  &\quad=\sum_{j\ne i}a_{jk}\,2\lambda_2d_id_j+\lambda_2d_i(d_i-2Q).
+\end{align*}
+Because $a_{jk}\in\{0,1\}$ and $1\le d_i\le Q$, the total change satisfies
+\[
+  \Delta H=-A_i+\sum_{j\ne i}a_{jk}\big(c_{ij}+2\lambda_2d_id_j\big)+\lambda_2d_i(d_i-2Q)
+  \le -A_i+\Gamma_i<0 .
+\]
+ 
+\emph{Case $s\ge2$.} Choose a vehicle $k$ with $a_{ik}=1$ and set $a_{ik}=0$. The assignment penalty of
+customer $i$ changes by $A_i\big[(s-2)^2-(s-1)^2\big]=-A_i(2s-3)\le-A_i$. The objective $f$ changes by
+$-\sum_{j\ne i}a_{jk}c_{ij}\le0$. The capacity term of vehicle $k$ changes by
+\begin{align*}
+  &\lambda_2\big[(L_k-d_i)^2-2Q(L_k-d_i)\big]-\lambda_2\big[L_k^2-2QL_k\big]\\
+  &\quad=\lambda_2\big[L_k^2-2L_kd_i+d_i^2-2QL_k+2Qd_i-L_k^2+2QL_k\big]\\
+  &\quad=\lambda_2\big[d_i^2-2L_kd_i+2Qd_i\big]\\
+  &\quad=\lambda_2d_i\,(d_i-2L_k+2Q)\\
+  &\quad\le\lambda_2d_i\,(d_i-2d_i+2Q)=\lambda_2d_i(2Q-d_i),
+\end{align*}
+where the inequality uses $L_k\ge d_i$ (customer $i$ is on vehicle $k$) and $\lambda_2 d_i\ge0$. Hence
+$\Delta H\le-A_i+\lambda_2d_i(2Q-d_i)<0$.
+ 
+In both cases $a$ is not a minimizer of $H$. Since $H$ is defined on the finite set $\{0,1\}^{NK'}$, a
+minimizer exists, and by the above it satisfies \eqref{c:assign}. $\qedhere$
+\end{proof}
+ 
+Condition \eqref{eq:Abound} is sufficient but loose; a large $A_i$ compresses the objective couplings after scaling to the device.
+
+\paragraph{Chosen weights.} We use $\lambda_2=10$ and $A=\Gamma_{\max}/2$, with $\Gamma_{\max}=\max_i\Gamma_i$. This
+choice lies below the bound \eqref{eq:Abound} on all 100 tier-S instances tested, so it is validated empirically
+rather than proven: exhaustive enumeration of all $2^{NK'}$ bitstrings gave a ground state satisfying
+\eqref{c:assign} on every instance, with outcomes identical to the rigorous choice; with $A=\Gamma_{\max}/4$,
+\eqref{c:assign} failed for $\lambda_2\ge12$. At $\lambda_2=10$ the ground state is the constrained optimum on 79
+instances, feasible but suboptimal on 19, and over capacity on 2. No $\lambda_2\in\{6,8,10,12,15\}$ removes all
+overloads: the quadratic penalty grows with load imbalance rather than with overload, so a clustering that
+exceeds $Q$ by one unit costs only $O(\lambda_2 d_{\max})$ more than a balanced one, while larger $\lambda_2$
+increases the number of suboptimal ground states. Relative to the rigorous bound, $A=\Gamma_{\max}/2$ reduces the
+median coupling dynamic range from $18.5$ to $11.5$. Because $\lambda_2$ trades distance against demand, it is
+retuned for each tier. (Script: \texttt{step1\_qubo\_check.py}; seeds $0$--$99$; results in \texttt{step1\_results.csv}.)
+
+\paragraph{Device scaling.} Let $U_{\max}$ be the largest coupling coefficient of \eqref{eq:qubo}. Multiplying
+\eqref{eq:qubo} by $\sigma=55.4/U_{\max}$~rad/$\mu$s places the strongest coupling at the 5~$\mu$m minimum spacing;
+the final detuning is $\sigma\delta$, which must satisfy $\sigma\delta\le125.66$~rad/$\mu$s. Under \eqref{eq:Abound},
+$U_{\max}=2\max_iA_i$, since every same-vehicle coupling satisfies $c_{ij}+2\lambda_2d_id_j\le\Gamma_i<A_i$; for
+penalty weights below the bound, $U_{\max}$ must be computed explicitly.
+
+\subsection{Variable accounting}
+\begin{center}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Encoding & Count & S & M & L & Fits in 80? \\
+\midrule
+One-hot assignment, no constraints & $NK$ & 8 & 30 & 60 & yes \\
++ binary-encoded slack & $NK + K\lceil \log_2(Q+1) \rceil$ & 14 & 45 & 80 & L at the cap \\
+Our formulation & $NK_{\min}$ & 8$^{\dagger}$ & 20--30 & 30--60 & yes \\
+\bottomrule
+\end{tabular}
+\end{center}
+{\small $^{\dagger}$Instances with $K_{\min}=1$ (4 atoms) are trivial and are excluded by the generator (Sec.~\ref{sec:instances}).}
+
+The atom cap is necessary but not sufficient. The emulators bound what can be run in practice
+(state-vector methods to roughly 20 atoms, emu-mps to roughly 30--60 at moderate entanglement), and the
+couplings must be realizable in a plane: the one-hot structure requires, for each customer, a strongly
+coupled $K'$-clique, and between vehicles, couplings that should vanish.
+% TODO: per-instance K_min and atom counts once instances are generated.
+
+% =========================================================
+\section{Instances and reference values}
+\label{sec:instances}
+\paragraph{Feasibility certification (Task A2).} The brief's assumptions do not guarantee feasibility:
+$D\le KQ$ is necessary but not sufficient, and deciding feasibility is a bin-packing problem. For each
+seeded draw of demands we solve bin packing exactly with the $O(N2^N)$ subset dynamic program
+($dp[S]$ = lexicographic minimum of bins used and current-bin load), which returns $K_{\min}$ and an
+explicit assignment into $K_{\min}$ vehicles. A draw is accepted only if $2\le K_{\min}\le K$: $K_{\min}>K$ is
+infeasible, and $K_{\min}=1$ is trivial. The certificate shipped with each instance is this assignment.
+An independent validator checks every location lies in $[0,100]^2$, $1\le d_i\le Q$ (Assumption~5),
+\eqref{c:assign} and \eqref{c:cap} on the certificate, that it uses exactly $K_{\min}$ non-empty vehicles with
+$K_{\min}\le K$ (hence feasibility for the full fleet), and minimality of $K_{\min}$: either $K_{\min}=\lceil D/Q\rceil$,
+which is a lower bound, or an exhaustive backtracking search confirms that $K_{\min}-1$ vehicles cannot pack
+the demands. Both algorithms reproduce the brief's counterexample and agree on 2000 random packings.
+% TODO: generator details (geometries, rho bands, seeds), per-instance rho and d_max/Q, reference
+%       method and status (brute force / CPLEX / SA) with solver settings.
+
+% =========================================================
+\section{Embedding}
+\label{sec:embedding}
+% TODO: layout method, realized vs. target couplings, embedding-fidelity formula.
+
+% =========================================================
+\section{Pulse design}
+\label{sec:pulse}
+% TODO: amplitude and detuning waveforms, duration, tuning procedure, emulator settings
+% (including emu-mps bond dimension).
+
+% =========================================================
+\section{Results}
+\label{sec:results}
+% TODO: model gap, CVRP gap, feasibility rate, P(reach reference) with epsilon,
+% atom count, embedding fidelity, reference status; random-sampler baseline;
+% raw vs. post-processed reported separately.
+
+% =========================================================
+\section{What did not work}
+\label{sec:failures}
+% TODO
+
+% =========================================================
+\section{Use of AI}
+\label{sec:ai}
+% TODO: where AI was used and for what.
+
+% =========================================================
+\begin{thebibliography}{9}
+\bibitem{montanez2024unbalanced}
+J.~A. Monta\~nez-Barrera, D.~Willsch, A.~Maldonado-Romo, and K.~Michielsen,
+``Unbalanced penalization: a new approach to encode inequality constraints of combinatorial problems
+for quantum optimization algorithms,''
+\emph{Quantum Science and Technology} \textbf{9}, 025022 (2024).
+arXiv:\href{https://arxiv.org/abs/2211.13914}{2211.13914}.
+\end{thebibliography}
+
+\end{document}
