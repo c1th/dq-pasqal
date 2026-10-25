@@ -1,29 +1,54 @@
-# DuQuantum × Pasqal — Track A (Team Alex and Bob)
+# DuQuantum × Pasqal — Track A: capacity-feasible clustering on a neutral-atom register
+
+Team Alex and Bob (Alex Wang, Christopher Thai). Tier S, emulated on Pulser's `AnalogDevice`.
 
 ## Environment
 Python 3.10+.
+
     python -m venv .venv
-    .venv\Scripts\Activate.ps1      # macOS/Linux: source .venv/bin/activate
-    pip install -r requirements.txt
+    .venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
+    pip install -r requirements.txt     # pinned versions (pulser, scipy, numpy, cplex, docplex, ...)
 
-## Step 1: tier-S QUBO validation (classical, exhaustive)
-    python instances.py             # self-tests of the generator and validator
-    python step1_qubo_check.py      # writes step1_results.csv
+## Headline result — one command
 
-Settings (top of step1_qubo_check.py): tier S, N_SEEDS = 100 (seeds 0–99),
-LAMBDA2S = [6, 8, 10, 12, 15], A modes rigorous / tight / gamma_half / gamma_quarter.
-Instances: instances.generate(tier, seed) with default load-ratio band [0.45, 0.95];
-each instance ships an exact bin-packing certificate checked by instances.validate.
+    python reproduce.py
 
-## Steps 2–3: embedding and first emulation (tier S)
-    python step2_embed_check.py      # coefficient matching; writes step2_positions/, step2_results.csv
-    python step2b_ladder_embed.py    # ladder layout (K'=2); writes step2b_positions/, step2b_results.csv
-    python step3_emulate.py          # baseline pulse, 1000 shots; writes results.csv
+Regenerates the atom registers and runs the emulation (about 6–8 minutes), writing `results.csv`. Expected summary
+(tier S, 20 instances, 8 atoms, 1000 shots, baseline 4 µs pulse):
 
-### Result
-Chosen weights: lambda_2 = 10, A = Gamma_max / 2 (validated empirically, not proven).
-On 100 tier-S instances, the QUBO ground state satisfies the assignment constraint (C1)
-on every instance, identical to the rigorous bound. At lambda_2 = 10 it is the constrained
-optimum on 79, feasible but suboptimal on 19, and over capacity on 2. No lambda_2 in
-{6, 8, 10, 12, 15} removes all overloads. A = Gamma_max / 4 violates (C1) for lambda_2 >= 12.
-A = Gamma_max / 2 lies below the proven bound on 100 of 100 instances.
+| Method | Feasible shots (raw) | Best shot optimal | P(reach optimum) |
+|---|---|---|---|
+| Ladder layout | 96.1% | 15/20 | 0.323 |
+| Coefficient matching | 68.9% | 16/20 | 0.292 |
+| Weighted log fit | 70.3% | 16/20 | 0.261 |
+| Uniform random | 2.9% | 20/20 | 0.008 |
+
+`python reproduce.py --all` additionally runs the instance export, the penalty-weight study and the CPLEX cross-check.
+The coefficient-matching and log fits depend on the optimizer's local minimum and can differ slightly with other
+`numpy`/`scipy` versions; use the pinned environment.
+
+## Deliverables
+| Deliverable | Where |
+|---|---|
+| Model write-up (formulations, variable-count table) | `docs/model_writeup.pdf` |
+| Report (4 pages max) | `docs/report.pdf` |
+| Instances: generator, validator | `instances.py` (`generate(tier, seed)`, `validate(inst)`) |
+| Instances: seeds, certificates, reference values | `instances_tierS.json` (seeds 0–99; `python export_instances.py`) |
+| Results, one row per (instance, method, seed) | `results.csv` |
+
+## Pipeline
+| Step | Script | Output |
+|---|---|---|
+| Instances | `instances.py` (self-test: `python instances.py`), `export_instances.py` | `instances_tierS.json` |
+| 1. Penalty weights (exhaustive, 100 instances) | `step1_qubo_check.py` | `step1_results.csv` |
+| 2. Coefficient matching and weighted log fit | `step2_embed_check.py` | `step2_results.csv`, `step2_positions/` |
+| 2b. Ladder layout | `step2b_ladder_embed.py` | `step2b_results.csv`, `step2b_positions/` |
+| 3. Emulation, decoding, repair, metrics | `step3_emulate.py` | `results.csv` |
+| CPLEX vs brute force | `cplex_check.py` | `cplex_check.csv` |
+
+Seeds: tier S, seeds 0–99 for Step 1, seeds 0–19 for Steps 2–3 and the CPLEX check. Chosen weights:
+λ₂ = 10, A = Γ_max/2.
+
+## Notes
+- Emulation uses free-form atom positions; `AnalogDevice` requires a register layout for QPU submission.
+- Use of AI is described in the report (Sec. 7).

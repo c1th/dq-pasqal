@@ -1,0 +1,136 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.7in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\setlength{\parskip}{2pt}
+\title{\vspace{-1.5em}Capacity-Feasible Clustering for the CVRP on a Neutral-Atom Analog Device\\
+\large DuQuantum $\times$ Pasqal Challenge --- Track A --- Report}
+\author{Team Alex and Bob (Alex Wang, Christopher Thai)}
+\date{\vspace{-1em}October 25, 2026}
+\begin{document}
+\maketitle
+\vspace{-1.5em}
+\noindent Full derivations, proofs and settings are in the model write-up (\texttt{docs/model\_writeup.tex}); every
+number below is reproduced by the scripts in the repository.
+
+\section{Model}
+We cluster customers onto vehicles (cluster-first, route-second) and route each cluster exactly afterwards, for
+evaluation only. One atom represents each assignment variable $a_{ik}$ (customer $i$ on vehicle $k$). The register is
+built for $K'=K_{\min}$ vehicles, the exact bin-packing number of the demands, computed per instance; the remaining
+vehicles stay unused. The clustering objective is the within-vehicle pairwise distance
+$f(a)=\sum_k\sum_{i<j}c_{ij}a_{ik}a_{jk}$, and the device minimizes
+\[
+  H(a)=f(a)+\sum_iA_i\Big(1-\sum_ka_{ik}\Big)^2+\lambda_2\sum_k\big(L_k^2-2QL_k\big),\qquad L_k=\sum_id_ia_{ik}.
+\]
+The capacity term is a slack-free penalty derived from unbalanced penalization (Monta\~nez-Barrera et al., Quantum Sci.\
+Technol.\ 9, 025022, 2024); on assignments satisfying the assignment constraint, its linear part is constant, so it
+reduces to load balancing and capacity is soft. After the register's laser is switched off it realizes
+$E(n)=-\delta\sum_mn_m+\sum_{m<m'}U_{mm'}n_mn_{m'}$ with one global detuning and positive couplings
+$U=C_6/r^6$, so a target QUBO must have non-negative couplings and \emph{equal} linear coefficients. Choosing
+$A_i=A+\lambda_2[d_i(d_i-2Q)-\min_jd_j(d_j-2Q)]$ makes every linear coefficient equal, so no detuning map is needed. We
+prove that $A_i>\max(\Gamma_i,\lambda_2d_i(2Q-d_i))$, with $\Gamma_i=\sum_{j\ne i}(c_{ij}+2\lambda_2d_id_j)$, guarantees that no
+ground state violates the assignment constraint; we use the smaller $A=\Gamma_{\max}/2$, validated by enumerating all
+$2^{8}$ states of 100 tier-S instances, on which it gave the same ground states as the proven bound with a lower
+coupling dynamic range. With $\lambda_2=10$, chosen on the same instances, the QUBO's ground state is the constrained
+optimum on 79 of 100, feasible but suboptimal on 19 and over capacity on 2.
+
+\section{Variable accounting}
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Encoding & Count & S & M & L & Fits in 80? \\
+\midrule
+One-hot assignment only & $NK$ & 8 & 30 & 60 & yes \\
++ binary-encoded slack & $NK+K\lceil\log_2(Q+1)\rceil$ & 14 & 45 & 80 & L at the cap \\
+Ours (no slack, $K'=K_{\min}$) & $NK_{\min}$ & 8 & 20--30 & 30--60 & yes \\
+\bottomrule
+\end{tabular}
+\end{center}
+Slack bits cost atoms and give non-uniform linear coefficients, which a global detuning cannot realize. We ran tier S,
+where $K_{\min}=2$ on every instance, so every register has 8 atoms; the tier-M and tier-L entries follow from
+$K_{\min}\in\{2,3\}$ and $\{2,3,4\}$ under our generator.
+
+\section{Embedding}
+\textbf{Coefficient matching} is the standard approach of Pulser's QUBO tutorial: atom positions are fitted so that
+$C_6/r^6$ matches every scaled QUBO coupling, including the target zeros (least squares, analytic gradients, 20
+restarts, exact enforcement of the 5~$\mu$m spacing and 38~$\mu$m radius). Fidelity is the relative Frobenius error
+$\varepsilon_F$ over all pairs. On tier S it reproduced the wanted couplings to $2.4\%$, yet residual cross-vehicle
+couplings reordered the low-energy states.
+
+\textbf{Ladder layout ($K'=2$).} Under the assignment constraint each customer has one excited atom, so the energy of
+a valid clustering depends only on each customer pair's same-vehicle minus cross-vehicle coupling: cross-vehicle
+couplings need to be \emph{equal}, not zero. We force equality by symmetry: vehicle~1's atoms on one rail, vehicle~2's
+on a parallel rail 5~$\mu$m away, each customer's two atoms at the same position $\xi_i$. Only the $\xi_i$ are fitted, to
+$u_{ij}-v_{ij}=t\,(c_{ij}+2\lambda_2d_id_j)$. With $B_i=\sum_ju_{ij}$, any detuning in $(\max_iB_i,\,U_{\mathrm{oh}})$ provably
+gives ground states that satisfy the assignment constraint for the realized register itself; no enumeration is used.
+
+\textbf{Selection by shots.} A weighted log fit gave more correct static ground states than coefficient matching on
+tier S (10 vs.\ 7 of 20) but a lower probability of reaching the optimum in emulation ($0.26$ vs.\ $0.29$; same
+ordering in a second environment). By a rule fixed beforehand (higher $P(\text{reach})$, feasibility as tiebreaker),
+coefficient matching is our general embedder and the ladder our $K'=2$ embedder.
+
+\section{Pulse design}
+Baseline adiabatic sweep on \texttt{AnalogDevice}: amplitude ramp $0\to2\pi\times1.5$~MHz$\to0$, detuning sweep
+$-\delta_f\to0\to\delta_f$ (three-point interpolation), $T=4~\mu$s; $\delta_f$ comes from the embedding (window midpoint,
+$49.9$~rad/$\mu$s, for the ladder). Tier S is emulated exactly (\texttt{pulser-simulation}, state vector, no noise);
+1000 shots per instance are sampled from the exact final state with fixed seeds. The pulse was not tuned (Sec.~7).
+
+\section{Results}
+All references are proven optima found by brute force, and CPLEX (time limit 60~s per solve) agreed with brute force
+on all 20 instances for both the clustering model and the CVRP. Raw results use the best feasible shot. Repaired
+results first pass every shot through a fixed, light repair: keep the cheapest vehicle of a doubly assigned customer,
+place unassigned customers on the cheapest vehicle with room, and move single customers out of overloaded vehicles.
+\begin{table}[h]\centering\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+Tier S (20 inst., 8 atoms) & Fidelity & Feasible (raw) & Best gap 0 (raw) & $P(\text{reach}),\ \varepsilon=0$ & Feasible (rep.) & Best gap 0 (rep.) & Median CVRP gap \\
+\midrule
+Ladder & $\varepsilon_L=0.55$ & 96.1\% & 15/20 & 0.323 & 99.8\% & 19/20 & 0.0\% \\
+Coefficient matching & $\varepsilon_F=0.23$ & 68.9\% & 16/20 & 0.292 & 94.7\% & 18/20 & 0.0\% \\
+Weighted log fit & $\varepsilon_F=0.37$ & 70.3\% & 16/20 & 0.261 & 98.8\% & 20/20 & 0.0\% \\
+Uniform random & -- & 2.9\% & 20/20 & 0.008 & 90.2\% & 20/20 & 0.0\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\noindent\textbf{Tier S.} The register concentrates probability on good solutions: shots reach the optimum about
+$40\times$ more often than random bitstrings, and up to 96\% are feasible against 3\%. Best-gap metrics are saturated,
+however: with only a handful of feasible clusterings per instance, even random sampling finds the optimum, so tier S
+validates the pipeline but cannot rank methods by best gap. The ladder's exact probability of the optimum equals the
+sampled value; its remaining loss comes from the embedding (its realized ground state is the wrong clustering on 13 of
+20 instances), not from the sweep. Repair brings even random sampling to 90\% feasibility, so raw results are primary.
+
+
+\section{What did not work}
+\begin{itemize}\setlength\itemsep{1pt}
+\item \textbf{Capacity stays soft.} No $\lambda_2$ removed all overloads on tier S (2 of 100 ground states at
+$\lambda_2=10$): the penalty measures imbalance, not overload. On those instances the optimum is the first excited level.
+\item \textbf{Weak penalties.} $\lambda_2\le2$ left 8 of 30 tier-S ground states over capacity, and
+$A=\Gamma_{\max}/4$ broke the assignment constraint.
+\item \textbf{Coefficient fidelity does not predict ground states.} $2.4\%$ coupling error still gave only 7 of 20
+correct ground states (79\% for the exact QUBO). Forcing unwanted couplings below 10\% of the weakest wanted one broke
+the assignment constraint on all 20 instances.
+\item \textbf{Static ground states do not predict shots} (weighted log fit, Sec.~3).
+\item \textbf{Limits of the ladder.} It is defined only for $K'=2$, and its one-dimensional coordinates cannot
+represent all pairwise weights (median valid-energy error $0.55$), so its ground state is often a wrong clustering.
+\item \textbf{Not done:} pulse tuning, and tiers M and L, which we did not complete in the time available. Next we would keep
+registers at tier-S size and use them as a subproblem solver inside a light classical neighborhood search, compared
+against the same loop with random sampling.
+\end{itemize}
+
+\section{Use of AI}
+We used Claude (Anthropic) throughout: to verify our penalty expansion calculations and rigor of mathematical proofs, to write the generator, validator, embedding, emulation, and reference scripts, to validating the ladder layout, and to typeset this report and the write-up. We rerun every script in our pinned environment and put the numbers resulting from our runs, independently confirmed the 10\% hinge failure, and verified the cited paper.
+
+\begin{thebibliography}{8}
+\bibitem{montanez2024unbalanced}
+J.~A. Monta\~nez-Barrera, D.~Willsch, A.~Maldonado-Romo, and K.~Michielsen,
+``Unbalanced penalization: a new approach to encode inequality constraints of combinatorial problems
+for quantum optimization algorithms,''
+\emph{Quantum Science and Technology} \textbf{9}, 025022 (2024).
+arXiv:\href{https://arxiv.org/abs/2211.13914}{2211.13914}.
+\end{thebibliography}
+
+\end{document}
