@@ -1,0 +1,21 @@
+seed,brute_cluster,cplex_cluster,cplex_cluster_status,agree_cluster,brute_cvrp,cplex_cvrp,cplex_cvrp_status,agree_cvrp,cplex_maxtime_s
+0,118.067623,118.067623,integer optimal solution,True,305.583785,305.583785,integer optimal solution,True,60
+1,133.246385,133.246385,integer optimal solution,True,292.337357,292.337357,integer optimal solution,True,60
+2,96.02234,96.02234,integer optimal solution,True,252.466779,252.466779,integer optimal solution,True,60
+3,100.16129,100.16129,integer optimal solution,True,231.588305,231.588305,integer optimal solution,True,60
+4,76.821198,76.821198,integer optimal solution,True,180.480806,180.480806,integer optimal solution,True,60
+5,134.230778,134.230778,integer optimal solution,True,315.48647,315.48647,integer optimal solution,True,60
+6,83.544371,83.544371,integer optimal solution,True,204.221864,204.221864,integer optimal solution,True,60
+7,82.864445,82.864445,integer optimal solution,True,243.742296,243.742296,integer optimal solution,True,60
+8,80.748098,80.748098,integer optimal solution,True,206.906435,206.906435,integer optimal solution,True,60
+9,113.225965,113.225965,integer optimal solution,True,292.620654,292.620654,integer optimal solution,True,60
+10,153.199352,153.199352,integer optimal solution,True,266.602542,266.602542,integer optimal solution,True,60
+11,139.763075,139.763075,integer optimal solution,True,330.848557,330.848557,integer optimal solution,True,60
+12,131.752312,131.752312,integer optimal solution,True,302.761015,302.761015,integer optimal solution,True,60
+13,170.874535,170.874535,integer optimal solution,True,311.697073,311.697073,integer optimal solution,True,60
+14,33.146378,33.146378,integer optimal solution,True,124.574307,124.574307,integer optimal solution,True,60
+15,60.629447,60.629447,integer optimal solution,True,224.144054,224.144054,integer optimal solution,True,60
+16,132.708915,132.708915,integer optimal solution,True,331.642661,331.642661,integer optimal solution,True,60
+17,70.580014,70.580014,integer optimal solution,True,182.866315,182.866315,integer optimal solution,True,60
+18,52.425029,52.425029,integer optimal solution,True,201.160438,201.160438,integer optimal solution,True,60
+19,89.548604,89.548604,integer optimal solution,True,241.969409,241.969409,integer optimal solution,True,60

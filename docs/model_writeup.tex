@@ -140,8 +140,10 @@ Its weights are non-negative, so it maps onto positive Rydberg couplings with no
 (Sec.~\ref{sec:encoding}). For any non-negative pairwise objective, moving a customer to an empty vehicle never
 increases its value, so some minimizer spreads customers over every available vehicle, whereas by the triangle inequality merging two tours (when capacity permits) never increases
 route cost; sizing the register to $K_{\min}$ largely removes this mismatch and also minimizes the atom count.
-% TODO: insert our own measured numbers (pair-K vs pair-K_min vs savings decomposition gap, tier M),
-%       only after re-running the study script ourselves.
+On tier M (Sec.~\ref{sec:instances}), routing the optimal clustering of this model exactly gives a mean
+decomposition gap of $3.3\%$ (median $2.3\%$) on the 14 of 60 instances with $K_{\min}=2$, against $11.7\%$ (median
+$12.1\%$) when the register is built for the full fleet $K=3$; on the 46 instances with $K_{\min}=K=3$ the two coincide
+(mean $3.3\%$, median $1.7\%$).
 The model gap (Sec.~\ref{sec:results}) is measured against the optimum of \eqref{eq:cluster} with $K'=K_{\min}$.
 
 % =========================================================
@@ -382,8 +384,21 @@ An independent validator checks every location lies in $[0,100]^2$, $1\le d_i\le
 $K_{\min}\le K$ (hence feasibility for the full fleet), and minimality of $K_{\min}$: either $K_{\min}=\lceil D/Q\rceil$,
 which is a lower bound, or an exhaustive backtracking search confirms that $K_{\min}-1$ vehicles cannot pack
 the demands. Both algorithms reproduce the brief's counterexample and agree on 2000 random packings.
-% TODO: generator details (geometries, rho bands, seeds), per-instance rho and d_max/Q, reference
-%       method and status (brute force / CPLEX / SA) with solver settings.
+\paragraph{Reference values.} Every reference is a proven optimum. On tier S we enumerate all assignments and route
+each cluster by brute force. On tier M (seeds $0$--$59$) we compute the optimal depot tour of every customer subset with
+the Held--Karp dynamic program, then the CVRP optimum with the full fleet $K$ by an exact set-partition dynamic program
+over capacity-feasible subsets, in which each block is anchored on its lowest customer so that every partition is
+generated once. On every instance this optimum matched an enumeration of all $K^N$ labelled assignments, and both the
+CVRP optimum and the optimum of the clustering model were unique.
+
+\paragraph{CPLEX cross-check (tier S).} As required by the brief (Sec.~9.3), we solved the 20 tier-S instances of
+Table~\ref{tab:tierS} with CPLEX~22.2 (community edition, via \texttt{docplex}; time limit \texttt{cplex maxtime} $=60$~s
+per solve) and compared with brute force. The clustering model was solved with the products $a_{ik}a_{jk}$ linearized by
+$y_{ijk}\ge a_{ik}+a_{jk}-1$, $y_{ijk}\ge0$; the CVRP with the full fleet was solved in the three-index arc formulation
+\eqref{c:assign}--\eqref{c:depot}, with Miller--Tucker--Zemlin load constraints in place of \eqref{c:subtour}. Every
+solve ended with status ``integer optimal solution'', and CPLEX matched brute force on 20 of 20 instances for both
+problems. (Script: \texttt{cplex\_check.py}; results in \texttt{cplex\_check.csv}.)
+% TODO: generator details (geometries, rho bands, seeds), per-instance rho and d_max/Q.
 
 % =========================================================
 \section{Embedding}
@@ -515,6 +530,35 @@ Tier L ($K_{\min}=2$ on 1 of 40 seeds) & Coefficient matching, if emulation allo
 \end{tabular}}
 \end{center}
 
+\subsection{Tier M: static check}
+At 20 and 30 atoms the full spectrum cannot be enumerated, so we rank the $K'^N$ one-hot assignments by the energy of
+the realized register, with the tier-M weights of Sec.~\ref{sec:weights}, and check whether the lowest one is a strict
+local minimum of the full register energy, a necessary condition for it to be the ground state. Table~\ref{tab:tierMstatic}
+compares the best feasible one-hot state with the model optimum and with the mean of a uniformly random feasible
+clustering.
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+Registers & Fidelity (median) & Lowest one-hot: opt.\ / subopt.\ / overload & Local min. & Gap of best feasible & Random feasible & Optimum rank \\
+\midrule
+$K'=2$, ladder (14) & $\varepsilon_L=0.84$ & 0 / 10 / 4 & 14/14 & 27.6\% & 29.8\% & top 11\% \\
+$K'=2$, coefficient matching (14) & $\varepsilon_F=0.57$ & 0 / 4 / 10 & 0/14 & 31.0\% & 29.8\% & top 22\% \\
+$K'=3$, coefficient matching (46) & $\varepsilon_F=0.75$ & 0 / 19 / 27 & 0/46 & 84.5\% & 81.8\% & top 5\% \\
+\bottomrule
+\end{tabular}}
+\caption{Tier M, realized registers ranked over one-hot assignments (medians over instances).}
+\label{tab:tierMstatic}
+\end{table}
+
+\noindent The realized tier-M registers retain almost none of the objective: their best feasible one-hot state is no
+better than a random feasible clustering, the optimum never appears among the three lowest one-hot levels, and for
+coefficient matching the lowest one-hot state is never even a local minimum, so the true ground state violates
+\eqref{c:assign}. The ladder keeps \eqref{c:assign} by construction but cannot represent the weights: with
+$\lambda_2=35$ the median coupling dynamic range is 237, and ten customers on a line cannot reproduce 45 pairwise
+weights. Emulating these registers would therefore measure the embedding, not the device.
+
 % =========================================================
 \section{Pulse design}
 \label{sec:pulse}
@@ -588,6 +632,10 @@ primary. Tier M, where random sampling cannot find the optimum, is needed to com
   ground states than coefficient matching (10 vs.\ 7 of 20) but reached the optimum less often in emulation
   ($P(\text{reach})$ $0.26$ vs.\ $0.29$), and the same ordering held in a second environment ($0.19$ vs.\ $0.25$).
   Choosing it from static results alone would have been the wrong call, so embedders are now selected by shot metrics.
+  \item \textbf{Direct embedding does not scale to tier M.} On 20- and 30-atom registers, both embedders lost
+  essentially all objective information (Table~\ref{tab:tierMstatic}): the best feasible one-hot state was no better
+  than a random feasible clustering. The stronger capacity penalty needed by tightly packed $K'=2$ instances makes the
+  coupling dynamic range about 20 times larger than on tier S.
   \item \textbf{Limits of the ladder layout.} The two-rail layout (Sec.~\ref{sec:embedding}) guarantees
   \eqref{c:assign} and reproduced no overloads, but its one-dimensional customer coordinates cannot represent the
   target pairwise weights (median relative valid-energy error $0.55$), and it gave 7 of 20 optimal, within noise of
