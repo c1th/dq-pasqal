@@ -351,11 +351,12 @@ Our formulation & $NK_{\min}$ & 8$^{\dagger}$ & 20--30 & 30--60 & yes \\
 \end{center}
 {\small $^{\dagger}$Instances with $K_{\min}=1$ (4 atoms) are trivial and are excluded by the generator (Sec.~\ref{sec:instances}).}
 
+Tier M seeds 0–59: $K_{\min}=2$ on 14, $K_{\min}=3$ on 46; tier S: $K_{\min}=2$ on all.
+
 The atom cap is necessary but not sufficient. The emulators bound what can be run in practice
 (state-vector methods to roughly 20 atoms, emu-mps to roughly 30--60 at moderate entanglement), and the
 couplings must be realizable in a plane: the one-hot structure requires, for each customer, a strongly
 coupled $K'$-clique, and between vehicles, couplings that should vanish.
-% TODO: per-instance K_min and atom counts once instances are generated.
 
 \subsection{Decoding, feasibility and repair}
 \label{sec:decoding}
