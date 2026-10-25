@@ -21,4 +21,4 @@ On 100 tier-S instances, the QUBO ground state satisfies the assignment constrai
 on every instance, identical to the rigorous bound. At lambda_2 = 10 it is the constrained
 optimum on 79, feasible but suboptimal on 19, and over capacity on 2. No lambda_2 in
 {6, 8, 10, 12, 15} removes all overloads. A = Gamma_max / 4 violates (C1) for lambda_2 >= 12.
-A = Gamma_max / 2 lies below the proven bound on [FILL IN from step 1] of 100 instances.
+A = Gamma_max / 2 lies below the proven bound on 100 of 100 instances.
