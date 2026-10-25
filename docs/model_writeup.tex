@@ -313,12 +313,26 @@ retuned for each tier. (Script: \texttt{step1\_qubo\_check.py}; seeds $0$--$99$;
 On both over-capacity instances ($\rho=0.93$), the constrained optimum is the first excited energy level of the
 QUBO, so it is reachable by sampling and selected by the best-feasible-shot rule.
 
+\paragraph{Tier M.} (Script: \texttt{step4a\_tierM\_weights.py}; seeds $0$--$59$.)
+With $N=10$ the full QUBO has $2^{20}$ ($K'=2$) or $2^{30}$ ($K'=3$) states, so we enumerate the $K'^N$ one-hot
+assignments, on which the assignment penalty vanishes, and check that the lowest one-hot state is a strict local
+minimum of the full QUBO; it was on every instance and every $\lambda_2$ tested. For six $K'=2$ instances we enumerated
+all $2^{20}$ states and confirmed that the ground state is one-hot with $A=\Gamma_{\max}/2$. The tier-S value
+$\lambda_2=10$ does not transfer, and the right value depends on how tightly the $K'$ vehicles are packed. For $K'=3$
+(46 of 60 instances, effective load $D/(K'Q)$ between $0.68$ and $0.93$), $\lambda_2=1$ makes the lowest one-hot state
+optimal on 34, feasible but suboptimal on 8 and over capacity on 4; larger $\lambda_2$ removes overloads but quickly
+adds suboptimal states (22 of 46 at $\lambda_2=3$). The $K'=2$ instances (14 of 60) are packed much more tightly
+(effective load $0.75$--$1.00$, a direct consequence of choosing the smallest feasible fleet) and need $\lambda_2=35$ to
+remove overloads, giving 8 optimal, 6 suboptimal and none over capacity. We therefore use $\lambda_2=1$ for $K'=3$ and
+$\lambda_2=35$ for $K'=2$ on tier M. The stronger penalty raises the median coupling dynamic range from 54 to 237,
+which makes the $K'=2$ tier-M registers harder to embed.
+
 \paragraph{Device scaling.} Let $U_{\max}$ be the largest coupling coefficient of \eqref{eq:qubo}. Multiplying
 \eqref{eq:qubo} by $\sigma=55.4/U_{\max}$~rad/$\mu$s places the strongest coupling at the 5~$\mu$m minimum spacing;
 the final detuning is $\sigma\delta$, which must satisfy $\sigma\delta\le125.66$~rad/$\mu$s. Under \eqref{eq:Abound},
 $U_{\max}=2\max_iA_i$, since every same-vehicle coupling satisfies $c_{ij}+2\lambda_2d_id_j\le\Gamma_i<A_i$; for
 penalty weights below the bound, $U_{\max}$ must be computed explicitly. This mapping is used by the
-coefficient-matching embedder; the ladder layout of Sec.~\ref{sec:embedding} sets its detuning from a validity
+coefficient-matching and weighted log fits; the ladder layout of Sec.~\ref{sec:embedding} sets its detuning from a validity
 window instead.
 
 \subsection{Variable accounting}
@@ -374,7 +388,7 @@ the demands. Both algorithms reproduce the brief's counterexample and agree on 2
 % =========================================================
 \section{Embedding}
 \label{sec:embedding}
-We use two embedders: a general coefficient-matching fit, and a layout specialized to $K'=2$.
+We use three embedders: the standard coefficient-matching fit, a weighted log fit, and a layout specialized to $K'=2$.
 
 \subsection{Coefficient matching (general)}
 This is the standard approach of Pulser's QUBO tutorial~\cite{pulserqubo}: choose atom positions so that the realized
@@ -391,6 +405,19 @@ relative Frobenius error over all pairs,
 \[
   \varepsilon_F=\lVert U/\sigma-Q_{\mathrm{off}}\rVert_F\big/\lVert Q_{\mathrm{off}}\rVert_F .
 \]
+
+\subsection{Weighted log fit (general)}
+Coefficient matching weighs every coupling by its absolute error, so the many weak couplings barely influence the fit,
+and it treats the target zeros as hard targets. The weighted log fit changes both. It minimizes
+\[
+  \frac{\sum_{\text{wanted}}\omega_{mm'}\big(\log U_{mm'}-\log\sigma Q_{mm'}\big)^2}{\sum_{\text{wanted}}\omega_{mm'}}
+  +\frac{1}{n_0}\sum_{\text{target }0}\max\!\Big(0,\ \log U_{mm'}-\log\big(\tfrac12\min_{\text{wanted}}\sigma Q\big)\Big)^2 ,
+\]
+where the weights are $\omega=10$ for one-hot pairs (same customer), which enforce \eqref{c:assign}, and $\omega=1$
+otherwise, and $n_0$ is the number of target-zero pairs. The log error treats strong and weak couplings alike, and the
+hinge lets unwanted couplings be non-zero as long as they stay below half of the weakest wanted coupling, consistent
+with the observation below that they need not vanish. Optimizer, restarts, penalties and dilation are as for coefficient
+matching, and it applies to any $K'$. We report its fidelity with the same $\varepsilon_F$.
 
 \subsection{Ladder layout ($K'=2$)}
 \paragraph{Intuition.} Coefficient matching reproduced the wanted couplings well, but the cross-vehicle couplings,
@@ -454,6 +481,7 @@ instances (Sec.~\ref{sec:weights}). The two fidelity metrics measure different t
 Embedder & Fidelity (median) & Optimal & Feas., subopt. & Overload & C1 violated & Opt.\ in lowest 3 levels \\
 \midrule
 Coefficient matching & $\varepsilon_F=0.225$ & 7 & 7 & 5 & 1 & 10 \\
+Weighted log fit & $\varepsilon_F=0.371$ & 10 & 10 & 0 & 0 & 11 \\
 Ladder & $\varepsilon_L=0.55$ & 7 & 13 & 0 & 0 & 11 \\
 \bottomrule
 \end{tabular}}
@@ -465,19 +493,26 @@ The coefficient-matching result depends on the local minimum the optimizer reach
 3 overloaded and no \eqref{c:assign} violations, while the ladder fit reproduced exactly. We report the run from the
 environment pinned in \texttt{requirements.txt}.
 
-The ladder covers all tier-S instances but only part of the larger tiers, so we use both embedders as follows,
+The weighted log fit gives more correct static ground states than coefficient matching in both environments we ran
+(10 vs.\ 7 and 8 vs.\ 6 optimal), but a lower probability of reaching the optimum in emulation (Table~\ref{tab:tierS}:
+$0.26$ vs.\ $0.29$; $0.19$ vs.\ $0.25$ in the second environment). Static ground-state correctness therefore did not
+predict dynamic performance, so we select embedders by shot metrics. By a rule fixed before the comparison (higher
+$P(\text{reach})$, with raw feasibility as the tiebreaker when the two differ by less than $0.03$), coefficient
+matching is our general embedder. The ladder covers all tier-S instances but only part of the larger tiers, so we
+use the embedders as follows,
 report results separately by $K'$ and by embedder, and do not change the instance generator to favor $K'=2$:
 \begin{center}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}ll@{}}
 \toprule
 Instances & Embedder \\
 \midrule
-Tier S (all $K'=2$) & Ladder (main), coefficient matching (control) \\
+Tier S (all $K'=2$) & Ladder (main), coefficient matching (general), weighted log fit (comparison) \\
 Tier M, $K_{\min}=2$ (25 of 100 seeds) & Ladder, coefficient matching (control) \\
 Tier M, $K_{\min}=3$ (75 of 100 seeds) & Coefficient matching \\
 Tier L ($K_{\min}=2$ on 1 of 40 seeds) & Coefficient matching, if emulation allows \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{center}
 
 % =========================================================
@@ -508,6 +543,7 @@ Method & Feasible (raw) & Best gap $0$ (raw) & $P(\text{reach})$ & Feasible (rep
 \midrule
 Ladder & 96.1\% & 15/20 & 0.323 & 99.8\% & 19/20 & 0.0\% \\
 Coefficient matching & 68.9\% & 16/20 & 0.292 & 94.7\% & 18/20 & 0.0\% \\
+Weighted log fit & 70.3\% & 16/20 & 0.261 & 98.8\% & 20/20 & 0.0\% \\
 Uniform random & 2.9\% & 20/20 & 0.008 & 90.2\% & 20/20 & 0.0\% \\
 \bottomrule
 \end{tabular}}
@@ -524,7 +560,8 @@ coefficient matching, against $0.008$ for random sampling, and 96\% and 69\% of 
 ladder has the highest feasibility and $P(\text{reach})$, yet its best shot is optimal on fewer instances (15 vs.\ 16):
 it concentrates on its realized ground state, which is the wrong clustering on 13 of 20 instances
 (Table~\ref{tab:static}). Its exact probability of the optimum equals the sampled value, so the remaining loss comes
-from the embedding, not from sampling or the sweep. Repair brings every method, including random sampling, close to
+from the embedding, not from sampling or the sweep. The weighted log fit reaches the optimum with probability $0.26$,
+below coefficient matching ($0.29$), despite having more correct static ground states (Table~\ref{tab:static}). Repair brings every method, including random sampling, close to
 full feasibility, so on tier S repaired results reflect the repair rather than the device; we treat raw results as
 primary. Tier M, where random sampling cannot find the optimum, is needed to compare methods by gap.
 
@@ -547,6 +584,10 @@ primary. Tier M, where random sampling cannot find the optimum, is needed to com
   unwanted coupling to stay below 10\% of the weakest wanted one violated \eqref{c:assign} on all 20 instances: the
   geometry cannot satisfy the requirement, and the optimizer sacrificed the one-hot couplings. Weighting the
   one-hot couplings $10\times$ and relaxing the ceiling to 50\% restored \eqref{c:assign} but gave 10 of 20.
+  \item \textbf{Static ground states as a selection criterion.} The weighted log fit produced more correct realized
+  ground states than coefficient matching (10 vs.\ 7 of 20) but reached the optimum less often in emulation
+  ($P(\text{reach})$ $0.26$ vs.\ $0.29$), and the same ordering held in a second environment ($0.19$ vs.\ $0.25$).
+  Choosing it from static results alone would have been the wrong call, so embedders are now selected by shot metrics.
   \item \textbf{Limits of the ladder layout.} The two-rail layout (Sec.~\ref{sec:embedding}) guarantees
   \eqref{c:assign} and reproduced no overloads, but its one-dimensional customer coordinates cannot represent the
   target pairwise weights (median relative valid-energy error $0.55$), and it gave 7 of 20 optimal, within noise of

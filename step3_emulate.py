@@ -22,7 +22,7 @@ SHOTS = 1000
 T_NS = 4000                      # pulse duration (ns), multiple of the 4 ns clock, <= 6000
 OMEGA = 2 * np.pi * 1.5          # peak Rabi frequency (rad/us), <= 12.57
 EPS_GAP = 0.0                    # "reached the reference": model gap <= EPS_GAP percent
-METHODS = ["ladder", "frobenius", "random"]
+METHODS = ["ladder", "log_fit", "frobenius", "random"]   # log_fit = weighted log fit ("log_hinge" in Step 2)
 
 
 # ---------------- decoding, repair, evaluation ----------------
@@ -131,22 +131,25 @@ def main():
         cvrp_opt = min(routed_cost(a, K, P) for a in itertools.product(range(K), repeat=N)
                        if all(sum(d[i] for i in range(N) if a[i] == k) <= Q for k in range(K)))
         rng = np.random.default_rng(1000 + seed)
+        rng_log = np.random.default_rng(5000 + seed)     # separate stream: earlier methods' samples stay unchanged
         for method in METHODS:
+            r_m = rng_log if method == "log_fit" else rng
             n = N * Kp
             if method == "random":
-                shots = ["".join(map(str, rng.integers(0, 2, n))) for _ in range(SHOTS)]
+                shots = ["".join(map(str, r_m.integers(0, 2, n))) for _ in range(SHOTS)]
                 p_opt_exact, fid_metric, fid, delta_f = math.nan, "", math.nan, math.nan
             else:
                 if method == "ladder":
                     pos = np.load(f"step2b_positions/seed{seed}_ladder.npy")
                     meta = step2b[seed]; fid_metric, fid = "rel_valid_energy_err", float(meta["rel_valid_energy_err"])
                 else:
-                    pos = np.load(f"step2_positions/seed{seed}_frobenius.npy")
-                    meta = step2[(seed, "frobenius")]; fid_metric, fid = "rel_frob_err", float(meta["rel_frob_err"])
+                    name = "log_hinge" if method == "log_fit" else "frobenius"
+                    pos = np.load(f"step2_positions/seed{seed}_{name}.npy")
+                    meta = step2[(seed, name)]; fid_metric, fid = "rel_frob_err", float(meta["rel_frob_err"])
                 delta_f = float(meta["delta_dev"])
                 probs = final_probabilities(pos, delta_f)
                 keys = list(probs); pv = np.array([probs[k] for k in keys]); pv = pv / pv.sum()
-                shots = [keys[i] for i in rng.choice(len(keys), size=SHOTS, p=pv)]
+                shots = [keys[i] for i in r_m.choice(len(keys), size=SHOTS, p=pv)]
                 p_opt_exact = sum(p for b, p in probs.items()
                                   if is_feasible(decode(b, N, Kp), d, Q)
                                   and math.isclose(f_value(decode(b, N, Kp), c), f_opt, abs_tol=1e-9))
