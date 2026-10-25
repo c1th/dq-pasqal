@@ -2,6 +2,7 @@
 \usepackage[margin=0.85in]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs}
+\usepackage{graphicx}
 \usepackage{hyperref}
 
 % ---------- notation ----------
@@ -243,8 +244,9 @@ Constant & $\sum_i A_i$ \\
 \bottomrule
 \end{tabular}
 \end{center}
-All couplings are non-negative. The target zeros cannot be realized exactly; they appear as small residual
-couplings and are part of the embedding error (Sec.~\ref{sec:embedding}). Fixing a customer to a vehicle would break the vehicle-relabeling symmetry and save $K'$ atoms, but it would make the linear coefficients non-uniform again, so we do not do it.
+All couplings are non-negative. The target zeros cannot be realized exactly. On assignments satisfying
+\eqref{c:assign}, however, only the difference between the same-vehicle and cross-vehicle couplings of each customer
+pair affects the energy ordering, so cross-vehicle couplings need not vanish, only be equal (Sec.~\ref{sec:embedding}). Fixing a customer to a vehicle would break the vehicle-relabeling symmetry and save $K'$ atoms, but it would make the linear coefficients non-uniform again, so we do not do it.
 
 \subsection{Penalty weights}
 \label{sec:weights}
@@ -308,12 +310,16 @@ exceeds $Q$ by one unit costs only $O(\lambda_2 d_{\max})$ more than a balanced 
 increases the number of suboptimal ground states. Relative to the rigorous bound, $A=\Gamma_{\max}/2$ reduces the
 median coupling dynamic range from $18.5$ to $11.5$. Because $\lambda_2$ trades distance against demand, it is
 retuned for each tier. (Script: \texttt{step1\_qubo\_check.py}; seeds $0$--$99$; results in \texttt{step1\_results.csv}.)
+On both over-capacity instances ($\rho=0.93$), the constrained optimum is the first excited energy level of the
+QUBO, so it is reachable by sampling and selected by the best-feasible-shot rule.
 
 \paragraph{Device scaling.} Let $U_{\max}$ be the largest coupling coefficient of \eqref{eq:qubo}. Multiplying
 \eqref{eq:qubo} by $\sigma=55.4/U_{\max}$~rad/$\mu$s places the strongest coupling at the 5~$\mu$m minimum spacing;
 the final detuning is $\sigma\delta$, which must satisfy $\sigma\delta\le125.66$~rad/$\mu$s. Under \eqref{eq:Abound},
 $U_{\max}=2\max_iA_i$, since every same-vehicle coupling satisfies $c_{ij}+2\lambda_2d_id_j\le\Gamma_i<A_i$; for
-penalty weights below the bound, $U_{\max}$ must be computed explicitly.
+penalty weights below the bound, $U_{\max}$ must be computed explicitly. This mapping is used by the
+coefficient-matching embedder; the ladder layout of Sec.~\ref{sec:embedding} sets its detuning from a validity
+window instead.
 
 \subsection{Variable accounting}
 \begin{center}
@@ -335,6 +341,19 @@ couplings must be realizable in a plane: the one-hot structure requires, for eac
 coupled $K'$-clique, and between vehicles, couplings that should vanish.
 % TODO: per-instance K_min and atom counts once instances are generated.
 
+\subsection{Decoding, feasibility and repair}
+\label{sec:decoding}
+A measured bitstring $n\in\{0,1\}^{NK'}$ is decoded as $a_{ik}=n_{iK'+k}$. A shot is \emph{feasible} if $a$ satisfies
+\eqref{c:assign} and \eqref{c:cap}, and its cost is $f(a)$. Following the brief (Pitfall~9.1), we report two quantities
+separately: \emph{raw}, the best feasible shot with no post-processing, and \emph{repaired}, the best shot after every
+shot passes through a fixed, light repair. The repair (1) keeps, for a customer assigned to several vehicles, the one
+with the smallest within-vehicle distance to its other customers; (2) places each unassigned customer, heaviest first,
+on the vehicle with room that adds the least distance (on any vehicle if none has room); (3) while a vehicle is
+overloaded, moves the single customer whose move to a vehicle with room adds the least distance, and declares the shot
+infeasible if no such move exists. It costs $O(N^2K')$ per shot. The same decoding and repair are applied to a uniform
+random sampler as a baseline. The best shot is the feasible shot with the lowest $f$; its clusters are routed by an
+exact TSP to compute the CVRP gap.
+
 % =========================================================
 \section{Instances and reference values}
 \label{sec:instances}
@@ -355,30 +374,192 @@ the demands. Both algorithms reproduce the brief's counterexample and agree on 2
 % =========================================================
 \section{Embedding}
 \label{sec:embedding}
-% TODO: layout method, realized vs. target couplings, embedding-fidelity formula.
+We use two embedders: a general coefficient-matching fit, and a layout specialized to $K'=2$.
+
+\subsection{Coefficient matching (general)}
+This is the standard approach of Pulser's QUBO tutorial~\cite{pulserqubo}: choose atom positions so that the realized
+couplings $U_{mm'}=C_6/\lVert\mathbf r_m-\mathbf r_{m'}\rVert^6$ reproduce the scaled off-diagonal QUBO coefficients
+$\sigma Q_{mm'}$, by minimizing the Frobenius norm of the difference. We minimize
+\[
+  \sum_{m<m'}\big(U_{mm'}-\sigma Q_{mm'}\big)^2\Big/\sum_{m<m'}\big(\sigma Q_{mm'}\big)^2
+\]
+over all pairs, including those whose target is zero, using analytic gradients (L-BFGS-B), 20 random restarts, and
+quadratic penalties for the 5~$\mu$m spacing and the 38~$\mu$m radius. Because the spacing penalty is soft, the
+result is dilated uniformly until the minimum distance is exactly 5~$\mu$m; this scales every coupling by the same
+factor, which is absorbed into $\sigma$ and the detuning. The method applies to any $K'$. Its fidelity is the
+relative Frobenius error over all pairs,
+\[
+  \varepsilon_F=\lVert U/\sigma-Q_{\mathrm{off}}\rVert_F\big/\lVert Q_{\mathrm{off}}\rVert_F .
+\]
+
+\subsection{Ladder layout ($K'=2$)}
+\paragraph{Intuition.} Coefficient matching reproduced the wanted couplings well, but the cross-vehicle couplings,
+which should be zero, remained large enough to reorder the low-energy states (Table~\ref{tab:static}). Two
+observations led to the ladder. First, on any assignment satisfying \eqref{c:assign}, each customer has exactly one
+excited atom, so for each customer pair exactly one of its four couplings is active. Shifting every cross-vehicle
+coupling of a pair by the same constant therefore changes all valid energies equally: cross-vehicle couplings need to
+be \emph{equal}, not zero. Second, equality can be forced by symmetry. If every customer's two atoms are mirror images
+across one common line, the two cross-vehicle distances of any pair coincide, and so do the two same-vehicle
+distances. Placing vehicle~1's atoms on one rail and vehicle~2's on a parallel rail, with a customer's two atoms at the
+same position along the rails, achieves this.
+
+\paragraph{Layout.} Vehicle $k$'s atoms lie on the rail $y=(k-\tfrac12)b$ with $b=5$~$\mu$m, and customer $i$'s two
+atoms at position $\xi_i$ along both rails. For every customer pair, the same-vehicle, cross-vehicle and one-hot
+couplings are, exactly,
+\[
+  u_{ij}=\frac{C_6}{|\xi_i-\xi_j|^6},\qquad v_{ij}=\frac{C_6}{\big(|\xi_i-\xi_j|^2+b^2\big)^3},\qquad
+  U_{\mathrm{oh}}=\frac{C_6}{b^6}.
+\]
+For an assignment satisfying \eqref{c:assign}, with customer $i$ on vehicle $k_i$, the register energy
+\eqref{eq:register} is
+\[
+  E=-\delta_rN+\sum_{i<j}v_{ij}+\sum_{i<j,\;k_i=k_j}\big(u_{ij}-v_{ij}\big),
+\]
+and on the same assignments the target \eqref{eq:qubo} equals $\sum_{i<j,\,k_i=k_j}w_{ij}$ plus a constant, with
+$w_{ij}=c_{ij}+2\lambda_2d_id_j$. The ordering of valid clusterings is therefore reproduced exactly if
+$u_{ij}-v_{ij}=t\,w_{ij}$ for a scale $t>0$. We fit the positions $\xi_i$ and $t$ by minimizing
+$\sum_{i<j}\big(u_{ij}-v_{ij}-t\,w_{ij}\big)^2/(t\bar w)^2$ (Nelder--Mead, 40 random restarts), with penalties for the
+5~$\mu$m spacing along a rail, the register radius, and the window condition of the claim below. Only couplings enter
+the fit; no states are enumerated. Its fidelity is the relative valid-energy error over customer pairs,
+$\varepsilon_L=\lVert(u-v)/t-w\rVert/\lVert w\rVert$.
+
+\medskip\noindent\textbf{Claim.} \emph{Let $B_i=\sum_{j\ne i}u_{ij}$. If $\max_iB_i<\delta_r<U_{\mathrm{oh}}$, every
+ground state of the register energy \eqref{eq:register} satisfies \eqref{c:assign}.}
+
+\begin{proof}
+If both atoms of a customer are excited, de-exciting one of them changes $E$ by $\delta_r-U_{\mathrm{oh}}$ minus its
+(non-negative) couplings to the other excited atoms, which is at most $\delta_r-U_{\mathrm{oh}}<0$. Hence a minimizer has
+no customer with two excited atoms. In such a minimizer, suppose customer $i$ has no excited atom. Every other
+customer $j$ then has at most one excited atom, whose coupling to either atom of $i$ is $u_{ij}$ or $v_{ij}\le u_{ij}$.
+Exciting one of $i$'s atoms therefore changes $E$ by at most $-\delta_r+B_i<0$, a contradiction. So every customer has
+exactly one excited atom.
+\end{proof}
+
+\noindent We fit with $\max_iB_i\le0.8\,U_{\mathrm{oh}}$ and set $\delta_r$ to the midpoint of the window. Unlike
+Sec.~\ref{sec:weights}, this guarantee holds for the realized register itself, including every residual coupling.
+Capacity \eqref{c:cap} remains soft. The layout is defined only for $K'=2$: with three rails in a row, the outer
+one-hot coupling is $2^6=64$ times weaker and the window closes, and with a triangle of atoms per customer the
+cross-vehicle distances are no longer equal. Its one-dimensional coordinates also cannot represent arbitrary pairwise
+weights.
+
+\subsection{Static comparison and coverage}
+Table~\ref{tab:static} compares the realized registers' ground states, found by enumerating all $2^{NK'}$ bitstrings
+(evaluation only). For reference, the exact QUBO's ground state is the constrained optimum on 79\% of 100 tier-S
+instances (Sec.~\ref{sec:weights}). The two fidelity metrics measure different things and are not comparable.
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+Embedder & Fidelity (median) & Optimal & Feas., subopt. & Overload & C1 violated & Opt.\ in lowest 3 levels \\
+\midrule
+Coefficient matching & $\varepsilon_F=0.225$ & 7 & 7 & 5 & 1 & 10 \\
+Ladder & $\varepsilon_L=0.55$ & 7 & 13 & 0 & 0 & 11 \\
+\bottomrule
+\end{tabular}}
+\caption{Ground state of the realized register, tier S, 20 instances.}
+\label{tab:static}
+\end{table}
+The coefficient-matching result depends on the local minimum the optimizer reaches. In a second environment (different
+\texttt{numpy}/\texttt{scipy} versions), the same script and seeds gave 6 optimal, 11 feasible but suboptimal,
+3 overloaded and no \eqref{c:assign} violations, while the ladder fit reproduced exactly. We report the run from the
+environment pinned in \texttt{requirements.txt}.
+
+The ladder covers all tier-S instances but only part of the larger tiers, so we use both embedders as follows,
+report results separately by $K'$ and by embedder, and do not change the instance generator to favor $K'=2$:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Instances & Embedder \\
+\midrule
+Tier S (all $K'=2$) & Ladder (main), coefficient matching (control) \\
+Tier M, $K_{\min}=2$ (25 of 100 seeds) & Ladder, coefficient matching (control) \\
+Tier M, $K_{\min}=3$ (75 of 100 seeds) & Coefficient matching \\
+Tier L ($K_{\min}=2$ on 1 of 40 seeds) & Coefficient matching, if emulation allows \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 % =========================================================
 \section{Pulse design}
 \label{sec:pulse}
-% TODO: amplitude and detuning waveforms, duration, tuning procedure, emulator settings
-% (including emu-mps bond dimension).
+We use the baseline of the brief (Sec.~8.2), built with Pulser~\cite{pulser2022} on \texttt{AnalogDevice}: the
+amplitude is a three-point interpolated ramp $0\to\Omega_{\mathrm{peak}}\to0$ with $\Omega_{\mathrm{peak}}=2\pi\times1.5$~MHz
+$=9.42$~rad/$\mu$s, the detuning a three-point interpolated sweep $-\delta_f\to0\to\delta_f$, and the duration
+$T=4~\mu$s. The final detuning $\delta_f$ is set by the embedding: the window midpoint $\delta_r$ for the ladder
+($49.9$~rad/$\mu$s on tier S) and $\sigma\delta$ for coefficient matching. All values are within the device limits. The
+pulse is not yet tuned. Tier S is emulated exactly with \texttt{pulser-simulation} (\texttt{QutipBackendV2}, state
+vector, no noise); 1000 shots per instance are sampled from the exact final-state probabilities with fixed seeds, and
+we also record the exact probability of the optimal clustering.
+% TODO: pulse tuning; emu-sv / emu-mps settings (bond dimension) for tier M.
 
 % =========================================================
 \section{Results}
 \label{sec:results}
-% TODO: model gap, CVRP gap, feasibility rate, P(reach reference) with epsilon,
-% atom count, embedding fidelity, reference status; random-sampler baseline;
-% raw vs. post-processed reported separately.
+\paragraph{Tier S, baseline pulse.} Table~\ref{tab:tierS} reports 20 tier-S instances (8 atoms, $K'=2$), 1000 shots
+each, with $\varepsilon=0$ for reaching the reference. Both references are proven optima found by brute force: the
+clustering model's optimum, and the CVRP optimum with the full fleet $K=2$ and exact routing.
+\begin{table}[h]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Method & Feasible (raw) & Best gap $0$ (raw) & $P(\text{reach})$ & Feasible (repaired) & Best gap $0$ (rep.) & Median CVRP gap \\
+\midrule
+Ladder & 96.1\% & 15/20 & 0.323 & 99.8\% & 19/20 & 0.0\% \\
+Coefficient matching & 68.9\% & 16/20 & 0.292 & 94.7\% & 18/20 & 0.0\% \\
+Uniform random & 2.9\% & 20/20 & 0.008 & 90.2\% & 20/20 & 0.0\% \\
+\bottomrule
+\end{tabular}}
+\caption{Tier S. Feasibility and $P(\text{reach})$ are averaged over instances; ``best gap $0$'' counts instances whose
+best feasible shot is the clustering optimum. The CVRP gap uses the repaired best shot.}
+\label{tab:tierS}
+\end{table}
+
+\noindent Tier S is too small to compare methods by best gap: each instance has only a handful of feasible
+clusterings, so even the about 29 feasible shots among 1000 uniform random bitstrings contain the optimum on every
+instance. The informative metrics are the feasibility rate and the probability of reaching the reference. There the
+emulated register concentrates probability on good solutions: $P(\text{reach})$ is $0.32$ for the ladder and $0.29$ for
+coefficient matching, against $0.008$ for random sampling, and 96\% and 69\% of shots are feasible against 3\%. The
+ladder has the highest feasibility and $P(\text{reach})$, yet its best shot is optimal on fewer instances (15 vs.\ 16):
+it concentrates on its realized ground state, which is the wrong clustering on 13 of 20 instances
+(Table~\ref{tab:static}). Its exact probability of the optimum equals the sampled value, so the remaining loss comes
+from the embedding, not from sampling or the sweep. Repair brings every method, including random sampling, close to
+full feasibility, so on tier S repaired results reflect the repair rather than the device; we treat raw results as
+primary. Tier M, where random sampling cannot find the optimum, is needed to compare methods by gap.
 
 % =========================================================
 \section{What did not work}
 \label{sec:failures}
-% TODO
+\begin{itemize}
+  \item \textbf{Weak capacity penalty.} With $\lambda_2\le2$, 8 of 30 tier-S ground states exceeded capacity, all with
+  load ratio $\rho\ge0.79$. No $\lambda_2\in\{6,8,10,12,15\}$ removed all overloads on 100 instances
+  (Sec.~\ref{sec:weights}): the penalty measures load imbalance, not overload.
+  \item \textbf{Too small a one-hot penalty.} With $A=\Gamma_{\max}/4$, the ground state violated \eqref{c:assign} for
+  $\lambda_2\ge12$, so $A$ cannot be lowered much below $\Gamma_{\max}/2$.
+  \item \textbf{Coefficient matching does not preserve the ground state.} Fitting every coupling, including the target
+  zeros, by least squares (relative Frobenius error, median $0.225$) reproduced the wanted couplings to a median
+  error of $2.4\%$, yet the realized ground state was the constrained optimum on only 7 of 20 instances, against 79\%
+  for the exact QUBO, and was over capacity on 5 and violated \eqref{c:assign} on 1. The residual cross-vehicle couplings reached about half of the weakest wanted coupling,
+  enough to reorder the low-energy states. Coefficient fidelity was therefore a poor predictor of ground-state
+  correctness.
+  \item \textbf{Forcing unwanted couplings small breaks the constraints.} A log-space fit that required every
+  unwanted coupling to stay below 10\% of the weakest wanted one violated \eqref{c:assign} on all 20 instances: the
+  geometry cannot satisfy the requirement, and the optimizer sacrificed the one-hot couplings. Weighting the
+  one-hot couplings $10\times$ and relaxing the ceiling to 50\% restored \eqref{c:assign} but gave 10 of 20.
+  \item \textbf{Limits of the ladder layout.} The two-rail layout (Sec.~\ref{sec:embedding}) guarantees
+  \eqref{c:assign} and reproduced no overloads, but its one-dimensional customer coordinates cannot represent the
+  target pairwise weights (median relative valid-energy error $0.55$), and it gave 7 of 20 optimal, within noise of
+  the baselines. It is defined only for $K'=2$: all tier-S instances, 25 of 100 tier-M instances and 1 of 40 tier-L
+  instances under our generator; $K'\ge3$ instances use coefficient matching.
+\end{itemize}
 
 % =========================================================
 \section{Use of AI}
 \label{sec:ai}
-% TODO: where AI was used and for what.
+% TODO: where AI was used and for what. Include: the ladder-layout idea and its validity argument, and the
+%       step1/step2/step2b/step3 scripts, were developed with AI assistance (Claude); state what each team member
+%       re-derived or verified by hand.
 
 % =========================================================
 \begin{thebibliography}{9}
@@ -388,6 +569,13 @@ J.~A. Monta\~nez-Barrera, D.~Willsch, A.~Maldonado-Romo, and K.~Michielsen,
 for quantum optimization algorithms,''
 \emph{Quantum Science and Technology} \textbf{9}, 025022 (2024).
 arXiv:\href{https://arxiv.org/abs/2211.13914}{2211.13914}.
+\bibitem{pulserqubo}
+Pulser documentation, ``QAA to solve a QUBO problem,''
+\url{https://pulser.readthedocs.io/en/stable/tutorials/qubo.html}.
+\bibitem{pulser2022}
+H.~Silv\'erio, S.~Grijalva, C.~Dalyac, L.~Leclerc, P.~J. Karalekas, N.~Shammah, M.~Beji, L.-P. Henry, and L.~Henriet,
+``Pulser: An open-source package for the design of pulse sequences in programmable neutral-atom arrays,''
+\emph{Quantum} \textbf{6}, 629 (2022).
 \end{thebibliography}
 
 \end{document}
