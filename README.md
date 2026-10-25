@@ -27,11 +27,19 @@ Regenerates the atom registers and runs the emulation (about 6–8 minutes), wri
 The coefficient-matching and log fits depend on the optimizer's local minimum and can differ slightly with other
 `numpy`/`scipy` versions; use the pinned environment.
 
+## Documents
+The report and the model write-up are in [`docs/`](docs/), as compiled PDFs alongside their LaTeX sources:
+
+| Document | PDF | LaTeX source |
+|---|---|---|
+| Report (4 pages max) | [`docs/DuQuantum_Pasqal_Report.pdf`](docs/DuQuantum_Pasqal_Report.pdf) | [`docs/report.tex`](docs/report.tex) |
+| Model write-up (formulations, derivations, variable-count table) | [`docs/DuQuantum_Pasqal_Model_Writeup.pdf`](docs/DuQuantum_Pasqal_Model_Writeup.pdf) | [`docs/model_writeup.tex`](docs/model_writeup.tex) |
+
 ## Deliverables
 | Deliverable | Where |
 |---|---|
-| Model write-up (formulations, variable-count table) | `docs/model_writeup.pdf` |
-| Report (4 pages max) | `docs/report.pdf` |
+| Model write-up (formulations, variable-count table) | `docs/DuQuantum_Pasqal_Model_Writeup.pdf` (source `docs/model_writeup.tex`) |
+| Report (4 pages max) | `docs/DuQuantum_Pasqal_Report.pdf` (source `docs/report.tex`) |
 | Instances: generator, validator | `instances.py` (`generate(tier, seed)`, `validate(inst)`) |
 | Instances: seeds, certificates, reference values | `instances_tierS.json` (seeds 0–99; `python export_instances.py`) |
 | Results, one row per (instance, method, seed) | `results.csv` |
