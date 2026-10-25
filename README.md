@@ -15,6 +15,11 @@ LAMBDA2S = [6, 8, 10, 12, 15], A modes rigorous / tight / gamma_half / gamma_qua
 Instances: instances.generate(tier, seed) with default load-ratio band [0.45, 0.95];
 each instance ships an exact bin-packing certificate checked by instances.validate.
 
+## Steps 2–3: embedding and first emulation (tier S)
+    python step2_embed_check.py      # coefficient matching; writes step2_positions/, step2_results.csv
+    python step2b_ladder_embed.py    # ladder layout (K'=2); writes step2b_positions/, step2b_results.csv
+    python step3_emulate.py          # baseline pulse, 1000 shots; writes results.csv
+
 ### Result
 Chosen weights: lambda_2 = 10, A = Gamma_max / 2 (validated empirically, not proven).
 On 100 tier-S instances, the QUBO ground state satisfies the assignment constraint (C1)
